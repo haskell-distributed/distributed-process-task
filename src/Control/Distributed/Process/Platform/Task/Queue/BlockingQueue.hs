@@ -41,11 +41,11 @@ module Control.Distributed.Process.Platform.Task.Queue.BlockingQueue
 
 import Control.Distributed.Process hiding (call)
 import Control.Distributed.Process.Closure()
-import Control.Distributed.Process.Platform
-import Control.Distributed.Process.Platform.Async
-import Control.Distributed.Process.Platform.ManagedProcess
-import qualified Control.Distributed.Process.Platform.ManagedProcess as ManagedProcess
-import Control.Distributed.Process.Platform.Time
+import Control.Distributed.Process.Extras.Internal.Types
+import Control.Distributed.Process.Async
+import Control.Distributed.Process.ManagedProcess
+import qualified Control.Distributed.Process.ManagedProcess as ManagedProcess
+import Control.Distributed.Process.Extras.Time
 import Control.Distributed.Process.Serializable
 import Data.Binary
 import Data.List
@@ -153,7 +153,7 @@ acceptTask s@(BlockingQueue sz' runQueue taskQueue) from task' =
       return $ s { accepted = enqueue taskQueue (from, task') }
     False -> do
       proc <- unClosure task'
-      asyncHandle <- async proc
+      asyncHandle <- async $ task proc
       ref <- monitorAsync asyncHandle
       taskEntry <- return (ref, from, asyncHandle)
       return s { active = (taskEntry:runQueue) }
