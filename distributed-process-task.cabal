@@ -32,7 +32,7 @@ library
   build-depends:
                    base >= 4.4 && < 5,
                    data-accessor >= 0.2.2.3,
-                   distributed-process >= 0.5.0 && < 0.6,
+                   distributed-process >= 0.5.2 && < 0.6,
                    distributed-process-extras >= 0.1.1 && < 0.2,
                    distributed-process-async >= 0.2 && < 0.3,
                    distributed-process-client-server >= 0.1.1 && <0.2,
@@ -67,7 +67,7 @@ test-suite TaskQueueTests
                    containers,
                    hashable,
                    unordered-containers >= 0.2.3.0 && < 0.3,
-                   distributed-process >= 0.5.0 && < 0.6,
+                   distributed-process >= 0.5.2 && < 0.6,
                    distributed-process-task,
                    distributed-process-extras,
                    distributed-process-async,
