@@ -1,4 +1,4 @@
-### distributed-process-platform [![travis](https://secure.travis-ci.org/haskell-distributed/distributed-process-platform.png)](http://travis-ci.org/haskell-distributed/distributed-process-platform)
+### distributed-process-task [![travis](https://secure.travis-ci.org/haskell-distributed/distributed-process-task.png)](http://travis-ci.org/haskell-distributed/distributed-process-task)
 
 
 This repository is part of Cloud Haskell.
