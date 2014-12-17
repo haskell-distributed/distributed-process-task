@@ -97,3 +97,4 @@ test-suite TaskQueueTests
   ghc-options:     -Wall -threaded -rtsopts -with-rtsopts=-N -fno-warn-unused-do-bind -eventlog
   extensions:      CPP
   main-is:         TestTaskQueues.hs
+  other-modules:   TestUtils
