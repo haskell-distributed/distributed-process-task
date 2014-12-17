@@ -8,17 +8,15 @@ module Main where
 import Control.Distributed.Process hiding (call)
 import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Node
-import Control.Distributed.Process.Platform hiding (__remoteTable, monitor,
-                                                    send, nsend, sendChan)
-import Control.Distributed.Process.Platform.Async
-import Control.Distributed.Process.Platform.ManagedProcess
-import Control.Distributed.Process.Platform.Test
-import Control.Distributed.Process.Platform.Time
-import Control.Distributed.Process.Platform.Timer
+import Control.Distributed.Process.Async
+import Control.Distributed.Process.ManagedProcess
+import Control.Distributed.Process.Extras.Time
+import Control.Distributed.Process.Extras.Timer
+import Control.Distributed.Process.Extras.Internal.Types
 import Control.Distributed.Process.Serializable()
 
-import Control.Distributed.Process.Platform.Task.Queue.BlockingQueue hiding (start)
-import qualified Control.Distributed.Process.Platform.Task.Queue.BlockingQueue as Pool (start)
+import Control.Distributed.Process.Task.Queue.BlockingQueue hiding (start)
+import qualified Control.Distributed.Process.Task.Queue.BlockingQueue as Pool (start)
 
 #if ! MIN_VERSION_base(4,6,0)
 import Prelude hiding (catch)
