@@ -22,9 +22,9 @@
 -- and so on.
 --
 -----------------------------------------------------------------------------
-module Control.Distributed.Process.Platform.Task
+module Control.Distributed.Process.Task
   ( -- * Task Queues
-    module Control.Distributed.Process.Platform.Task.Queue.BlockingQueue
+    module Control.Distributed.Process.Task.Queue.BlockingQueue
   ) where
 
-import Control.Distributed.Process.Platform.Task.Queue.BlockingQueue
+import Control.Distributed.Process.Task.Queue.BlockingQueue

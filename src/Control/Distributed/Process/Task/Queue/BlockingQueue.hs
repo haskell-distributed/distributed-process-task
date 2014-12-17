@@ -6,7 +6,7 @@
 
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Control.Distributed.Process.Platform.Task.Queue.BlockingQueue
+-- Module      :  Control.Distributed.Process.Task.Queue.BlockingQueue
 -- Copyright   :  (c) Tim Watson 2012 - 2013
 -- License     :  BSD3 (see the file LICENSE)
 --
@@ -29,7 +29,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Control.Distributed.Process.Platform.Task.Queue.BlockingQueue
+module Control.Distributed.Process.Task.Queue.BlockingQueue
   ( BlockingQueue()
   , SizeLimit
   , BlockingQueueStats(..)

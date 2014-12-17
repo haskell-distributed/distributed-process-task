@@ -55,8 +55,8 @@ library
   hs-source-dirs:   src
   ghc-options:      -Wall
   exposed-modules:
-                   Control.Distributed.Process.Platform.Task,
-                   Control.Distributed.Process.Platform.Task.Queue.BlockingQueue
+                   Control.Distributed.Process.Task,
+                   Control.Distributed.Process.Task.Queue.BlockingQueue
 
 test-suite TaskQueueTests
   type:            exitcode-stdio-1.0
