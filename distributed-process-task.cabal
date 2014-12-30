@@ -68,6 +68,7 @@ test-suite TaskQueueTests
                    hashable,
                    unordered-containers >= 0.2.3.0 && < 0.3,
                    distributed-process >= 0.5.3 && < 0.6,
+                   distributed-process-tests >= 0.4.3 && < 0.5,
                    distributed-process-task,
                    distributed-process-extras >= 0.2.0 && < 0.3,
                    distributed-process-async >= 0.2.1 && < 0.3,
@@ -97,4 +98,3 @@ test-suite TaskQueueTests
   ghc-options:     -Wall -threaded -rtsopts -with-rtsopts=-N -fno-warn-unused-do-bind -eventlog
   extensions:      CPP
   main-is:         TestTaskQueues.hs
-  other-modules:   TestUtils
