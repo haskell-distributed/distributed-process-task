@@ -14,6 +14,7 @@ import Control.Distributed.Process.Extras.Time
 import Control.Distributed.Process.Extras.Timer
 import Control.Distributed.Process.Extras.Internal.Types
 import Control.Distributed.Process.Serializable()
+import Control.Distributed.Process.Tests.Internal.Utils
 
 import Control.Distributed.Process.Task.Queue.BlockingQueue hiding (start)
 import qualified Control.Distributed.Process.Task.Queue.BlockingQueue as Pool (start)
@@ -22,10 +23,11 @@ import qualified Control.Distributed.Process.Task.Queue.BlockingQueue as Pool (s
 import Prelude hiding (catch)
 #endif
 
-import Test.Framework (Test, testGroup)
+import Test.Framework (Test, defaultMain, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import TestUtils
+-- import TestUtils
 
+import Network.Transport.TCP
 import qualified Network.Transport as NT
 
 -- utilities
@@ -135,3 +137,10 @@ tests transport = do
 main :: IO ()
 main = testMain $ tests
 
+-- | Given a @builder@ function, make and run a test suite on a single transport
+testMain :: (NT.Transport -> IO [Test]) -> IO ()
+testMain builder = do
+  Right (transport, _) <- createTransportExposeInternals
+                                    "127.0.0.1" "10501" defaultTCPParameters
+  testData <- builder transport
+  defaultMain testData
