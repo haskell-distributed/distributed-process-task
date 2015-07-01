@@ -1,9 +1,6 @@
 # distribributed-process-task
 [![travis](https://secure.travis-ci.org/haskell-distributed/distributed-process-task.png)](http://travis-ci.org/haskell-distributed/distributed-process-task)
-[![Release](https://img.shields.io/hackage/v/distributed-process-task.svg)](http://hackage.haskell.org/package/distributed-process-task)
-
-azure-service-api is made available under a BSD-3 license.
-This repository is part of Cloud Haskell.
+[![Release](https://img.shields.io/hackage/v/distributed-process-task.svg)](https://hackage.haskell.org/package/distributed-process-task)
 
 See http://haskell-distributed.github.com for documentation, user guides,
 tutorials and assistance.
