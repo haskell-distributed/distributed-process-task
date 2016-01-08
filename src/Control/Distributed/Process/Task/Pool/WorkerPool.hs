@@ -10,7 +10,7 @@
 
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Control.Distributed.Process.Platform.Task.Pool.WorkerPool
+-- Module      :  Control.Distributed.Process.Task.Pool.WorkerPool
 -- Copyright   :  (c) Tim Watson 2013
 -- License     :  BSD3 (see the file LICENSE)
 --
@@ -21,11 +21,11 @@
 -- [Process Pool (Backend)]
 --
 -- This module implements a pool of worker processes, implemented with the
--- 'BackingPool' API from "Control.Distributed.Process.Platform.Task.Pool'.
+-- 'BackingPool' API from "Control.Distributed.Process.Task.Pool'.
 --
 -----------------------------------------------------------------------------
 
-module Control.Distributed.Process.Platform.Task.Pool.WorkerPool where
+module Control.Distributed.Process.Task.Pool.WorkerPool where
 
 import Control.DeepSeq (NFData)
 import Control.Distributed.Process
@@ -53,16 +53,16 @@ import Control.Distributed.Process
   , finally
   , unwrapMessage
   )
-import Control.Distributed.Process.Platform.Internal.IdentityPool
+import Control.Distributed.Process.Extras.Internal.IdentityPool
   ( IDPool
   , newIdPool
   , takeId
   )
-import Control.Distributed.Process.Platform.Internal.Primitives
+import Control.Distributed.Process.Extras.Internal.Primitives
   ( spawnMonitorLocal
   , awaitExit
   )
-import Control.Distributed.Process.Platform.Internal.Types
+import Control.Distributed.Process.Extras.Internal.Types
   ( Resolvable(..)
   , Shutdown(..)
   , Linkable(..)
@@ -70,7 +70,7 @@ import Control.Distributed.Process.Platform.Internal.Types
   , ExitReason(..)
   )
 import Control.Distributed.Process.Serializable
-import Control.Distributed.Process.Platform.Task.Pool
+import Control.Distributed.Process.Extras.Task.Pool
 import Data.Binary
 import Data.Hashable
 import Data.Typeable (Typeable)
