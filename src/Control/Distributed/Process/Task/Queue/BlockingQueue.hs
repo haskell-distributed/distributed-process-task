@@ -44,6 +44,22 @@ import Control.Distributed.Process.Closure()
 import Control.Distributed.Process.Extras.Internal.Types
 import Control.Distributed.Process.Async
 import Control.Distributed.Process.ManagedProcess
+ ( InitResult(InitOk)
+ , ProcessDefinition(..)
+ , ProcessReply
+ , ProcessAction
+ , CallRef
+ , handleCall
+ , handleCallFrom
+ , handleInfo
+ , defaultProcess
+ , tryCall
+ , call
+ , continue
+ , reply
+ , noReply_
+ , replyTo
+ )
 import qualified Control.Distributed.Process.ManagedProcess as ManagedProcess
 import Control.Distributed.Process.Extras.Time
 import Control.Distributed.Process.Serializable
@@ -96,8 +112,8 @@ start init' = ManagedProcess.serve () (\() -> init') poolServer
   where poolServer =
           defaultProcess {
               apiHandlers = [
-                 handleCallFrom (\s f (p :: Closure (Process a)) -> storeTask s f p)
-               , handleCall poolStatsRequest
+                 handleCallFrom storeTask
+               , handleCall     poolStatsRequest
                ]
             , infoHandlers = [ handleInfo taskComplete ]
             } :: ProcessDefinition (BlockingQueue a)
@@ -135,27 +151,29 @@ poolStatsRequest st GetStats =
   in reply (BlockingQueueStats sz ac pj) st
 
 storeTask :: Serializable a
-          => BlockingQueue a
-          -> CallRef (Either ExitReason a)
+          => CallRef (Either ExitReason a)
+          -> BlockingQueue a
           -> Closure (Process a)
           -> Process (ProcessReply (Either ExitReason a) (BlockingQueue a))
-storeTask s r c = acceptTask s r c >>= noReply_
+storeTask r s c = acceptTask r s c >>= noReply_
 
 acceptTask :: Serializable a
-           => BlockingQueue a
-           -> CallRef (Either ExitReason a)
+           => CallRef (Either ExitReason a)
+           -> BlockingQueue a
            -> Closure (Process a)
            -> Process (BlockingQueue a)
-acceptTask s@(BlockingQueue sz' runQueue taskQueue) from task' =
+acceptTask from s@(BlockingQueue sz' runQueue taskQueue) task' =
   let currentSz = length runQueue
   in case currentSz >= sz' of
     True  -> do
       return $ s { accepted = enqueue taskQueue (from, task') }
     False -> do
       proc <- unClosure task'
-      asyncHandle <- async $ task proc
+      asyncHandle <- async $ task $ expect >>= \() -> proc
       ref <- monitorAsync asyncHandle
-      taskEntry <- return (ref, from, asyncHandle)
+      let wkr = asyncWorker asyncHandle
+      let taskEntry = (ref, from, asyncHandle)
+      send wkr ()
       return s { active = (taskEntry:runQueue) }
 
 -- a worker has exited, process the AsyncResult and send a reply to the
@@ -188,7 +206,7 @@ taskComplete s@(BlockingQueue _ runQ _)
           accQ  = dequeue acc in
       case accQ of
         Nothing            -> return st { active = runQ2 }
-        Just ((tr,tc), ts) -> acceptTask (st { accepted = ts, active = runQ2 }) tr tc
+        Just ((tr,tc), ts) -> acceptTask tr (st { accepted = ts, active = runQ2 }) tc
 
 findWorker :: MonitorRef
            -> [(MonitorRef, CallRef (Either ExitReason a), Async a)]
@@ -213,4 +231,3 @@ getR s =
   case (viewr s) of
     EmptyR -> Nothing
     a      -> Just a
-

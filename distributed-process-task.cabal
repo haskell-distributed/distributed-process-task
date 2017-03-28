@@ -1,5 +1,5 @@
 name:           distributed-process-task
-version:        0.1.2.1
+version:        0.1.2.2
 cabal-version:  >=1.8
 build-type:     Simple
 license:        BSD3
@@ -7,7 +7,7 @@ license-file:   LICENCE
 stability:      experimental
 Copyright:      Tim Watson 2012 - 2013
 Author:         Tim Watson
-Maintainer:     Facundo Domínguez <facundo.dominguez@tweag.io>
+Maintainer:     Tim Watson <watson.timothy@gmail.com>
 Stability:      experimental
 Homepage:       http://github.com/haskell-distributed/distributed-process-task
 Bug-Reports:    http://github.com/haskell-distributed/distributed-process-task/issues
@@ -30,27 +30,22 @@ flag perf
 
 library
   build-depends:
-                   base >= 4.4 && < 5,
+                   base >= 4.8.2.0 && < 5,
                    data-accessor >= 0.2.2.3,
-                   distributed-process >= 0.5.3 && < 0.6,
-                   distributed-process-extras >= 0.2.0 && < 0.3,
-                   distributed-process-async >= 0.2.1 && < 0.3,
-                   distributed-process-client-server >= 0.1.2 && <0.2,
-                   binary >= 0.6.3.0 && < 0.8,
-                   deepseq >= 1.3.0.1 && < 1.5,
+                   distributed-process >= 0.6.6 && < 0.7,
+                   distributed-process-extras >= 0.3.1 && < 0.4,
+                   distributed-process-async >= 0.2.4 && < 0.3,
+                   distributed-process-client-server >= 0.2.3 && <0.3,
+                   binary >= 0.6.3.0 && < 0.9,
+                   deepseq >= 1.3.0.1 && < 1.6,
                    mtl,
                    containers >= 0.4 && < 0.6,
                    hashable >= 1.2.0.5 && < 1.3,
                    unordered-containers >= 0.2.3.0 && < 0.3,
                    fingertree < 0.2,
                    stm >= 2.4 && < 2.5,
-                   time > 1.4 && < 1.6,
+                   time > 1.4 && < 1.8,
                    transformers
-  if impl(ghc <= 7.5)
-    Build-Depends:   template-haskell == 2.7.0.0,
-                     derive == 2.5.5,
-                     uniplate == 1.6.12,
-                     ghc-prim
   extensions:      CPP
   hs-source-dirs:   src
   ghc-options:      -Wall
@@ -62,17 +57,18 @@ test-suite TaskQueueTests
   type:            exitcode-stdio-1.0
 --  x-uses-tf:       true
   build-depends:
-                   base >= 4.4 && < 5,
+                   base >= 4.8.2.0 && < 5,
                    ansi-terminal >= 0.5 && < 0.7,
                    containers,
                    hashable,
+                   exceptions,
                    unordered-containers >= 0.2.3.0 && < 0.3,
-                   distributed-process >= 0.5.3 && < 0.6,
-                   distributed-process-tests >= 0.4.2 && < 0.5,
+                   distributed-process >= 0.6.6 && < 0.7,
+                   distributed-process-systest >= 0.1.1 && < 0.2,
                    distributed-process-task,
-                   distributed-process-extras >= 0.2.0 && < 0.3,
-                   distributed-process-async >= 0.2.1 && < 0.3,
-                   distributed-process-client-server >= 0.1.2 && <0.2,
+                   distributed-process-extras >= 0.3.1 && < 0.4,
+                   distributed-process-async >= 0.2.4 && < 0.3,
+                   distributed-process-client-server >= 0.2.3 && <0.3,
                    distributed-static,
                    bytestring,
                    data-accessor,
@@ -80,14 +76,15 @@ test-suite TaskQueueTests
                    network-transport >= 0.4 && < 0.5,
                    deepseq >= 1.3.0.1 && < 1.5,
                    mtl,
-                   network-transport-tcp >= 0.4 && < 0.5,
-                   binary >= 0.6.3.0 && < 0.8,
+                   network-transport-tcp >= 0.4 && < 0.6,
+                   binary >= 0.6.3.0 && < 0.9,
                    network >= 2.3 && < 2.7,
                    HUnit >= 1.2 && < 2,
                    stm >= 2.3 && < 2.5,
-                   time > 1.4 && < 1.6,
+                   time > 1.4 && < 1.8,
                    test-framework >= 0.6 && < 0.9,
                    test-framework-hunit,
+                   template-haskell,
                    QuickCheck >= 2.4,
                    test-framework-quickcheck2,
                    transformers,
