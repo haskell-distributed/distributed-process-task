@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE RecordWildCards     #-}
 
 module Main where
 
@@ -23,7 +23,7 @@ import Control.Distributed.Process.Task.Pool.WorkerPool
  , Worker
  )
 import Control.Rematch (equalTo)
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, void)
 import Control.Monad.Catch (catch)
 import Data.List
  ( elemIndex
@@ -109,11 +109,55 @@ testPoolBackend result = do
   liftIO $ putStrLn $ "w2 = " ++ (show w2)
 
   -- which means we'll get a start signal again
-  () <- receiveChan rSig
+  receiveChan rSig >>= stash result
 
   killProc w2 "bye bye"
+  killProc pool "done"
 
-  stash result ()
+clientDeathTriggersPolicyApplication :: Process ()
+clientDeathTriggersPolicyApplication = do
+  (sp, rp) <- newChan
+  (sig, rSig) <- newChan
+  let poolStart = runWorkerPool (testProcess sig rp) 2 OnInit LRU Release
+
+  pool <- Pool.start poolStart :: Process (ResourcePool Worker)
+
+  -- OnInit means both workers will start up whilst the pool is initialising...
+  replicateM 2 $ receiveChan rSig
+
+  -- spawn a process to act as the client and ensure it has
+  -- acquired the resource before we proceed
+  (cs, cr) <- newChan
+  client <- spawnLocal $ do
+    w1 <- acquireResource pool
+    unsafeSendChan cs w1
+    expect
+
+  hW1 <- receiveChan cr
+
+  liftIO $ putStrLn $ "hW1 = " ++ (show hW1)
+
+  -- kill the client goodbye, then ensure the resource is released
+  mRef <- monitor client
+  kill client "fubu"
+  void $ waitForDown mRef
+
+  -- although this is a /bit/ racy, 2 seconds is probably enough for the
+  -- pool to have noticed the client's death and released the resource
+  sleep $ seconds 2
+
+  ps@PoolStats{..} <- stats pool
+
+  activeResources `shouldBe` equalTo 0
+  inactiveResources `shouldBe` equalTo 2
+  activeClients `shouldBe` equalTo 0
+
+  liftIO $ putStrLn $ "stats: " ++ (show ps)
+
+waitForDown :: MonitorRef -> Process DiedReason
+waitForDown ref =
+  receiveWait [ matchIf (\(ProcessMonitorNotification ref' _ _) -> ref == ref')
+                        (\(ProcessMonitorNotification _ _ dr) -> return dr) ]
 
 -- utilities
 myRemoteTable :: RemoteTable
@@ -129,6 +173,8 @@ tests transport = do
          (delayedAssertion
           "expected the backend to manage API calls"
           localNode () testPoolBackend)
+       , testCase "Client Death Handling"
+         (runProcess localNode clientDeathTriggersPolicyApplication)
        ]
     ]
 

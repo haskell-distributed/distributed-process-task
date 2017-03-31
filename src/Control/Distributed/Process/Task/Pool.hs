@@ -42,6 +42,7 @@ module Control.Distributed.Process.Task.Pool
  , checkOut
  , checkIn
  , transfer
+ , stats
  , start
    -- Defining A Pool Backend
  , module Backend
@@ -62,6 +63,7 @@ import Control.Distributed.Process
 import Control.Distributed.Process.ManagedProcess.Client
   ( callChan
   , cast
+  , call
   )
 import qualified Control.Distributed.Process.Task.Pool.WorkerPool as WorkerPool
 import qualified Control.Distributed.Process.Task.Pool.Backend as Backend
@@ -73,6 +75,7 @@ import Control.Distributed.Process.Task.Pool.Internal.Types
  , ReclamationStrategy(..)
  , AcquireResource(..)
  , ReleaseResource(..)
+ , StatsReq(..)
  , PoolStats(..)
  , PoolStatsInfo(..)
  , Resource(..)
@@ -111,6 +114,11 @@ releaseResource :: forall r. (Referenced r)
                 -> r
                 -> Process ()
 releaseResource pool res = getSelfPid >>= cast pool . ReleaseResource res
+
+stats :: forall r . Referenced r
+         => ResourcePool r
+         -> Process PoolStats
+stats pool = call pool StatsReq
 
 transfer :: forall r. (Referenced r)
          => ResourcePool r

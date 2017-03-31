@@ -153,16 +153,20 @@ apiAcquire = do
   (a, b) <- resourceQueueLen
   lift $ liftIO $ putStrLn $ "resource q = " ++ (show ((a, b), sz))
 
-  if (toInteger $ a + b) >= sz
-    then return Block
-    else case pol of
-           OnInit   -> doAcquire True -- return . maybe Block Take =<< acquirePooledResource
-           OnDemand -> doAcquire (a > 0)
+  maybeAcquire pol (toInteger a) (toInteger b) sz
 
   where
-    doAcquire True  = return . maybe Block Take =<< acquirePooledResource
-    doAcquire False =
-      getResourceType >>= lift . create >>= stashResource >> doAcquire True
+
+    maybeAcquire pol' free taken limit'
+      | taken >= limit'  = return Block
+      | free > 0         = doAcquire
+      | OnDemand <- pol'
+      , free == 0        = doCreate
+      | otherwise        = doAcquire
+
+    doAcquire = return . maybe Block Take =<< acquirePooledResource
+    doCreate =
+      getResourceType >>= lift . create >>= stashResource >> doAcquire
 
 apiRelease :: Worker -> Pool WPState Worker ()
 apiRelease res = do
@@ -185,7 +189,7 @@ apiSetup = do
     startResources :: PoolSize -> Pool WPState Worker ()
     startResources cnt = do
       st <- getState :: Pool WPState Worker WPState
-      if cnt <= (sizeLimit st)
+      if cnt < (sizeLimit st)
          then do rType <- getResourceType
                  res <- lift $ create rType
                  stashResource res
@@ -220,10 +224,11 @@ apiInfoCall msg = do
 apiGetStats :: Pool WPState Worker [PoolStatsInfo]
 apiGetStats = do
   st <- getState
-  return [ PoolStatsInfo     "pool.backend.resource.name" "WorkerPool[Worker]"
-         , PoolStatsTypeInfo "pool.backend.resource.type" $ typeOf (undefined :: Process ())
-         , PoolStatsInfo     "pool.backend.impl"          "Control.Distributed.Process.Task.Pool.WorkerPool"
-         , PoolStatsCounter  "pool.backend.sizeLimit"     $ st ^. szLimit
+  return [ PoolStatsInfo     "pool.backend.name"            "WorkerPool"
+         , PoolStatsInfo     "pool.backend.impl"            "Control.Distributed.Process.Task.Pool.WorkerPool"
+         , PoolStatsInfo     "pool.backend.resource.name"   "Worker"
+         , PoolStatsTypeInfo "pool.backend.resource.type"   $ typeOf (undefined :: Process ())
+         , PoolStatsCounter  "pool.backend.config.sizeLimi" $ st ^. szLimit
 --         , PoolStatsCounter "available" a
 --         , PoolStatsCounter "busy" b
          ]

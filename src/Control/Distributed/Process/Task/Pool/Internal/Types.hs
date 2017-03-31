@@ -162,7 +162,7 @@ data PoolStatsInfo = PoolStatsInfo     String String  |
                      PoolStatsData     String TypeRep Message |
                      PoolStatsCounter  String Integer |
                      PoolStatsFloat    String Double
- deriving (Typeable, Generic)
+ deriving (Typeable, Generic, Show)
 instance Binary PoolStatsInfo where
 
 data PoolStats = PoolStats { totalResources    :: Integer
@@ -171,7 +171,7 @@ data PoolStats = PoolStats { totalResources    :: Integer
                            , activeClients     :: Int
                            , pendingClients    :: Int
                            , backendStats      :: [PoolStatsInfo]
-                           } deriving (Typeable, Generic)
+                           } deriving (Typeable, Generic, Show)
 instance Binary PoolStats where
 
 --------------------------------------------------------------------------------
