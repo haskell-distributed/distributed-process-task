@@ -10,10 +10,14 @@ packages:
     git: https://github.com/haskell-distributed/distributed-process-supervisor.git
     commit: bf2b5b06ed400ecc5906d4ef9a0c172810488435
   extra-dep: true
+- location:
+    git: https://github.com/haskell-distributed/distributed-process-extras.git
+    commit: 8a2ea856a8884dfef05167a24b38fac023d1991c
+  extra-dep: true
 
 extra-deps:
+- rank1dynamic-0.3.3.0
 - distributed-process-0.6.6         # missing snapshot
-- distributed-process-extras-0.3.1  # missing snapshot
 - distributed-process-async-0.2.4   # missing snapshot
 - distributed-process-systest-0.1.1 # missing prior to Jan-2017
 - rematch-0.2.0.0
