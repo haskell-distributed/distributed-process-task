@@ -265,8 +265,8 @@ handleGetStats st StatsReq = do
   (info, pst) <- runPoolStateT (st ^. poolState) $ getStats (st ^. poolBackend)
   let (a, b) = lengths (st ^. poolState .> resourceQueue)
   reply PoolStats { totalResources    = (toInteger $ a + b)
-                  , activeResources   = a
-                  , inactiveResources = b
+                  , activeResources   = b
+                  , inactiveResources = a
                   , activeClients     = MultiMap.size (st ^. clients)
                   , pendingClients    = Queue.size    (st ^. pending)
                   , backendStats      = info
