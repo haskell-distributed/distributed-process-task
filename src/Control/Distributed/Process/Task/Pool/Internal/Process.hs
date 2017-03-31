@@ -116,7 +116,7 @@ import qualified Data.Map.Strict as Map
  , lookup
  , delete
  )
-import qualified Data.Sequence as Seq (length)
+import qualified Data.Sequence as Seq (length, filter)
 import Data.Set (Set)
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as HashSet
@@ -241,6 +241,7 @@ handleAcquire clientPort st@State{..} (AcquireResource clientPid) = do
   mRef <- monitor clientPid
   (take', pst) <- runPoolStateT (st ^. poolState) (acquire (st ^. poolBackend))
   liftIO $ putStrLn $ "acquired " ++ (show take')
+  liftIO $ putStrLn $ "monitoring " ++ (show (clientPid, mRef))
   let st' = ( (poolState ^= pst)
             . (monitors ^: Map.insert clientPid mRef)
             $ st )
@@ -267,6 +268,7 @@ handleGetStats st StatsReq = do
   reply PoolStats { totalResources    = (toInteger $ a + b)
                   , activeResources   = b
                   , inactiveResources = a
+                  , lockedResources   = Set.size (st ^. locked)
                   , activeClients     = MultiMap.size (st ^. clients)
                   , pendingClients    = Queue.size    (st ^. pending)
                   , backendStats      = info
@@ -308,7 +310,7 @@ handleMonitorSignal st mSig@(ProcessMonitorNotification _ pid _) = do
   let st' = (monitors ^: Map.delete pid) st
   let mp = MultiMap.delete pid (st' ^. clients)
   case mp of
-    Nothing       -> handoffToBackend mSig =<< clearTickets pid st
+    Nothing       -> (\s -> (liftIO $ putStrLn "ignoring monitor") >> handoffToBackend mSig s) =<< clearTickets pid st
     Just (rs, q') -> applyReclamationStrategy pid (HashSet.fromList rs) $ (clients ^= q') st'
 
 handleShutdown :: forall s r . ExitState (State s r) -> ExitReason -> Process ()
@@ -364,12 +366,13 @@ applyReclamationStrategy pid rs st@State{..} =
   in clearTickets pid st >>= act rs >>= handoffToBackend pid
   where
     doRelease rs' st' = do
-      (_, pst) <- runPoolStateT poolState' (forM_ (HashSet.toList rs') release')
+      (_, pst) <- runPoolStateT (st' ^. poolState) (forM_ (HashSet.toList rs') release')
       return $ ( (poolState ^= pst)
                $ st' )
 
     doDestroy rs' st' = do
-      (_, pst) <- runPoolStateT poolState' (forM_ (HashSet.toList rs') dispose')
+      liftIO $ putStrLn "doDestroy"
+      (_, pst) <- runPoolStateT (st' ^. poolState) (forM_ (HashSet.toList rs') dispose')
       return $ ( (poolState ^= pst)
                $ st' )
 
@@ -378,9 +381,17 @@ applyReclamationStrategy pid rs st@State{..} =
       -- just /ignore/ the client's death and leave those resources marked (in
       -- the pool backend) as @busy@ here instead? When do we ever check this
       -- /locked list/ anyway???
-      return $ ( (locked ^: Set.union (Set.fromList (HashSet.toList rs'))) st' )
 
-    poolState'    = st ^. poolState
+      liftIO $ putStrLn "doPermLock"
+      (_, pst) <- runPoolStateT (st' ^. poolState) (forM_ (HashSet.toList rs') release')
+
+      return $ ( (locked ^: Set.union (Set.fromList (HashSet.toList rs')))
+               . (poolState .> resourceQueue
+                      .> available ^: Seq.filter (not . (flip HashSet.member) rs'))
+               . (poolState .> resourceQueue
+                      .> busy ^: Set.filter (not . (flip HashSet.member) rs'))
+               $ (poolState ^= pst) st' )
+
     dispose'      = dispose (st ^. poolBackend)
     release'      = release (st ^. poolBackend)
 

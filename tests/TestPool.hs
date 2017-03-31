@@ -118,9 +118,9 @@ clientDeathTriggersPolicyApplication :: Process ()
 clientDeathTriggersPolicyApplication = do
   (sp, rp) <- newChan
   (sig, rSig) <- newChan
-  let poolStart = runWorkerPool (testProcess sig rp) 2 OnInit LRU Release
+  let poolStart = \rs -> runWorkerPool (testProcess sig rp) 2 OnInit LRU rs
 
-  pool <- Pool.start poolStart :: Process (ResourcePool Worker)
+  pool <- Pool.start (poolStart Release) :: Process (ResourcePool Worker)
 
   -- OnInit means both workers will start up whilst the pool is initialising...
   replicateM 2 $ receiveChan rSig
@@ -146,13 +146,84 @@ clientDeathTriggersPolicyApplication = do
   -- pool to have noticed the client's death and released the resource
   sleep $ seconds 2
 
-  ps@PoolStats{..} <- stats pool
+  ps <- stats pool
 
-  activeResources `shouldBe` equalTo 0
-  inactiveResources `shouldBe` equalTo 2
-  activeClients `shouldBe` equalTo 0
+  (activeResources ps) `shouldBe` equalTo 0
+  (inactiveResources ps) `shouldBe` equalTo 2
+  (activeClients ps) `shouldBe` equalTo 0
 
   liftIO $ putStrLn $ "stats: " ++ (show ps)
+
+  pool' <- Pool.start (poolStart Destroy) :: Process (ResourcePool Worker)
+
+  -- OnInit means both workers will start up whilst the pool is initialising...
+  replicateM 2 $ receiveChan rSig
+
+  -- spawn a process to act as the client and ensure it has
+  -- acquired the resource before we proceed
+  client' <- spawnLocal $ do
+    w1 <- acquireResource pool'
+    unsafeSendChan cs w1
+    expect
+
+  hW2 <- receiveChan cr
+
+  liftIO $ putStrLn $ "hW2 = " ++ (show hW2)
+
+  Just pw2 <- resolve hW2
+  mW2 <- monitor pw2
+
+  -- kill the client goodbye, then ensure the resource is released
+  mRef' <- monitor client'
+  kill client' "fubu"
+  liftIO $ putStrLn $ "client dead " ++ (show client')
+  void $ waitForDown mRef'
+  void $ waitForDown mW2
+
+  -- although this is a /bit/ racy, 2 seconds is probably enough for the
+  -- pool to have noticed the client's death and released the resource
+  sleep $ seconds 2
+
+  ps' <- stats pool'
+
+  (activeResources ps') `shouldBe` equalTo 0
+  (inactiveResources ps') `shouldBe` equalTo 1
+  (activeClients ps') `shouldBe` equalTo 0
+
+  liftIO $ putStrLn $ "stats: " ++ (show ps')
+
+  pool'' <- Pool.start (poolStart PermLock) :: Process (ResourcePool Worker)
+
+  -- OnInit means both workers will start up whilst the pool is initialising...
+  replicateM 2 $ receiveChan rSig
+
+  -- spawn a process to act as the client and ensure it has
+  -- acquired the resource before we proceed
+  client'' <- spawnLocal $ do
+    w1 <- acquireResource pool''
+    unsafeSendChan cs w1
+    expect
+
+  hW3 <- receiveChan cr
+
+  liftIO $ putStrLn $ "hW3 = " ++ (show hW3)
+
+  -- kill the client goodbye, then ensure the resource is released
+  mRef'' <- monitor client''
+  kill client'' "fubu"
+  liftIO $ putStrLn $ "client dead " ++ (show client'')
+  void $ waitForDown mRef''
+
+  sleep $ seconds 2
+
+  ps'' <- stats pool''
+
+  (activeResources ps'') `shouldBe` equalTo 0
+  (inactiveResources ps'') `shouldBe` equalTo 1
+  (lockedResources ps'') `shouldBe` equalTo 1
+  (activeClients ps'') `shouldBe` equalTo 0
+
+  liftIO $ putStrLn $ "stats: " ++ (show ps'')
 
 waitForDown :: MonitorRef -> Process DiedReason
 waitForDown ref =

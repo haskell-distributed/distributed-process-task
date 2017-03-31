@@ -168,6 +168,7 @@ instance Binary PoolStatsInfo where
 data PoolStats = PoolStats { totalResources    :: Integer
                            , activeResources   :: Int
                            , inactiveResources :: Int
+                           , lockedResources   :: Int
                            , activeClients     :: Int
                            , pendingClients    :: Int
                            , backendStats      :: [PoolStatsInfo]
