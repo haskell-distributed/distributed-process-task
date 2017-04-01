@@ -97,7 +97,7 @@ import qualified Control.Distributed.Process.ManagedProcess as MP
 import Control.Distributed.Process.Extras.Time
 import Control.Distributed.Process.Serializable
 import Control.Distributed.Process.Task.Pool.Internal.Types
-import Control.Monad (void, forM_)
+import Control.Monad (void, forM_, unless)
 import qualified Control.Monad.State as ST
  ( runStateT
  )
@@ -236,29 +236,39 @@ handleAcquire :: forall s r. (Referenced r)
               -> State s r
               -> AcquireResource
               -> Process (ProcessAction (State s r))
-handleAcquire clientPort st@State{..} (AcquireResource clientPid) = do
+handleAcquire clientPort st@State{..} (AcquireResource pid) = do
   liftIO $ putStrLn "acquiring resource"
-  mRef <- monitor clientPid
   (take', pst) <- runPoolStateT (st ^. poolState) (acquire (st ^. poolBackend))
   liftIO $ putStrLn $ "acquired " ++ (show take')
-  liftIO $ putStrLn $ "monitoring " ++ (show (clientPid, mRef))
-  let st' = ( (poolState ^= pst)
-            . (monitors ^: Map.insert clientPid mRef)
-            $ st )
+  st' <- case Map.lookup pid (st ^. monitors) of
+           Just _  -> return $ (poolState ^= pst) st
+           Nothing -> monitor pid >>= \mRef -> do
+                        liftIO $ putStrLn $ "monitoring " ++ (show (pid, mRef))
+                        return $ ( (monitors ^: Map.insert pid mRef)
+                                 . (poolState ^= pst)
+                                 $ st
+                                 )
   case take' of
-    Block  -> addPending clientPid clientPort st'
-    Take r -> allocateResource r (Ticket clientPid clientPort) st'
+    Block  -> addPending pid clientPort $ st'
+    Take r -> allocateResource r (Ticket pid clientPort) st'
 
 handleRelease :: forall s r. (Referenced r)
               => State s r
               -> ReleaseResource r
               -> Process (ProcessAction (State s r))
 handleRelease st@State{..} (ReleaseResource res pid) = do
-  maybe (return ()) (void . unmonitor) $ Map.lookup pid (st ^. monitors)
+  unless clientHoldsOtherResources $ do
+    maybe (return ()) (void . unmonitor) $ Map.lookup pid (st ^. monitors)
   (_, pst) <- runPoolStateT (st ^. poolState) (release (st ^. poolBackend) res)
   dequeuePending $ ( (clients ^: MultiMap.filter (/= res))
                    . (poolState ^= pst)
                    $ st )
+  where
+    clientHoldsOtherResources =
+      let cs = MultiMap.lookup pid $ st ^. clients in
+      case cs of
+        Just cs' -> (length cs') > 1
+        Nothing  -> False
 
 handleGetStats :: forall s r . (Referenced r)
                => CallHandler (State s r) StatsReq PoolStats
@@ -314,9 +324,13 @@ handleMonitorSignal st mSig@(ProcessMonitorNotification _ pid _) = do
     Just (rs, q') -> applyReclamationStrategy pid (HashSet.fromList rs) $ (clients ^= q') st'
 
 handleShutdown :: forall s r . ExitState (State s r) -> ExitReason -> Process ()
-handleShutdown es reason
-  | st <- exitState es =
-      void $ runPoolStateT (st ^. poolState) (teardown (st ^. poolBackend) $ reason)
+handleShutdown es reason = do
+  (_, pst) <- runPoolStateT ps (forM_ (Set.toList lr) $ dispose pl)
+  void $ runPoolStateT pst (teardown pl $ reason)
+  where
+    ps = (exitState es) ^. poolState
+    pl = (exitState es) ^. poolBackend
+    lr = (exitState es) ^. locked
 
 backendInfoCall :: forall s r . (Referenced r)
                 => State s r
@@ -377,10 +391,6 @@ applyReclamationStrategy pid rs st@State{..} =
                $ st' )
 
     doPermLock rs' st' = do
-      -- we mark resources as locked, but to what end? isn't it sufficient to
-      -- just /ignore/ the client's death and leave those resources marked (in
-      -- the pool backend) as @busy@ here instead? When do we ever check this
-      -- /locked list/ anyway???
 
       liftIO $ putStrLn "doPermLock"
       (_, pst) <- runPoolStateT (st' ^. poolState) (forM_ (HashSet.toList rs') release')
@@ -400,10 +410,9 @@ addPending :: forall s r . (Referenced r)
            -> SendPort r
            -> State s r
            -> Process (ProcessAction (State s r))
-addPending clientPid clientPort st = do
-  let st' = ( (pending ^: \q -> Queue.enqueue q $ Ticket clientPid clientPort)
-            $ st)
-  continue st'
+addPending clientPid clientPort st =
+  let tkt = Ticket clientPid clientPort
+  in continue $ ( (pending ^: \q -> Queue.enqueue q tkt) $ st)
 
 allocateResource :: forall s r. (Referenced r)
                  => r

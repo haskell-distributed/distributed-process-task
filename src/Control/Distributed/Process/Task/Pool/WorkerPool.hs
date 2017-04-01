@@ -135,7 +135,7 @@ initState sz = WPState sz HashSet.empty
 
 poolDef :: PoolBackend WPState Worker
 poolDef = PoolBackend { acquire  = apiAcquire
-                      , release  = apiRelease
+                      , release  = releasePooledResource
                       , dispose  = apiDispose
                       , setup    = apiSetup
                       , teardown = apiTeardown
@@ -167,10 +167,6 @@ apiAcquire = do
     doAcquire = return . maybe Block Take =<< acquirePooledResource
     doCreate =
       getResourceType >>= lift . create >>= stashResource >> doAcquire
-
-apiRelease :: Worker -> Pool WPState Worker ()
-apiRelease res = do
-  releasePooledResource res
 
 apiDispose :: Worker -> Pool WPState Worker ()
 apiDispose r@Worker{..} = do
@@ -224,11 +220,11 @@ apiInfoCall msg = do
 apiGetStats :: Pool WPState Worker [PoolStatsInfo]
 apiGetStats = do
   st <- getState
-  return [ PoolStatsInfo     "pool.backend.name"            "WorkerPool"
-         , PoolStatsInfo     "pool.backend.impl"            "Control.Distributed.Process.Task.Pool.WorkerPool"
-         , PoolStatsInfo     "pool.backend.resource.name"   "Worker"
-         , PoolStatsTypeInfo "pool.backend.resource.type"   $ typeOf (undefined :: Process ())
-         , PoolStatsCounter  "pool.backend.config.sizeLimi" $ st ^. szLimit
+  return [ PoolStatsInfo     "pool.backend.name"             "WorkerPool"
+         , PoolStatsInfo     "pool.backend.impl"             "Control.Distributed.Process.Task.Pool.WorkerPool"
+         , PoolStatsInfo     "pool.backend.resource.name"    "Worker"
+         , PoolStatsTypeInfo "pool.backend.resource.type"    $ typeOf (undefined :: Process ())
+         , PoolStatsCounter  "pool.backend.config.sizeLimit" $ st ^. szLimit
 --         , PoolStatsCounter "available" a
 --         , PoolStatsCounter "busy" b
          ]

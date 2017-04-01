@@ -159,9 +159,9 @@ baseErrorMessage = "Control.Distributed.Process.Task.Pool"
 
 data PoolStatsInfo = PoolStatsInfo     String String  |
                      PoolStatsTypeInfo String TypeRep |
-                     PoolStatsData     String TypeRep Message |
+                     PoolStatsData     String Message |
                      PoolStatsCounter  String Integer |
-                     PoolStatsFloat    String Double
+                     PoolStatsDouble   String Double
  deriving (Typeable, Generic, Show)
 instance Binary PoolStatsInfo where
 

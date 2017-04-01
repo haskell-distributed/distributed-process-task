@@ -208,6 +208,9 @@ clientDeathTriggersPolicyApplication = do
 
   liftIO $ putStrLn $ "hW3 = " ++ (show hW3)
 
+  Just pw3 <- resolve hW2
+  mW3 <- monitor pw3
+
   -- kill the client goodbye, then ensure the resource is released
   mRef'' <- monitor client''
   kill client'' "fubu"
@@ -224,6 +227,11 @@ clientDeathTriggersPolicyApplication = do
   (activeClients ps'') `shouldBe` equalTo 0
 
   liftIO $ putStrLn $ "stats: " ++ (show ps'')
+
+  exitProc pool'' Shutdown
+
+  -- on shutdown, the pool should destroy even PermLock'ed resources
+  void $ waitForDown mW3
 
 waitForDown :: MonitorRef -> Process DiedReason
 waitForDown ref =
