@@ -34,7 +34,7 @@ module Control.Distributed.Process.Task.Queue.BlockingQueue
   , SizeLimit
   , BlockingQueueStats(..)
   , start
-  , pool
+  , mkQueue
   , executeTask
   , stats
   ) where
@@ -120,10 +120,10 @@ start init' = ManagedProcess.serve () (\() -> init') poolServer
 
 -- | Define a pool of a given size.
 --
-pool :: forall a . Serializable a
+mkQueue :: forall a . Serializable a
      => SizeLimit
      -> Process (InitResult (BlockingQueue a))
-pool sz' = return $ InitOk (BlockingQueue sz' [] Seq.empty) Infinity
+mkQueue sz' = return $ InitOk (BlockingQueue sz' [] Seq.empty) Infinity
 
 -- | Enqueue a task in the pool and block until it is complete.
 --

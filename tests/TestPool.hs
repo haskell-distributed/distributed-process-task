@@ -114,13 +114,20 @@ testPoolBackend result = do
   killProc w2 "bye bye"
   killProc pool "done"
 
-clientDeathTriggersPolicyApplication :: Process ()
-clientDeathTriggersPolicyApplication = do
+poolStart :: ReclamationStrategy
+          -> Process (ResourcePool Worker, SendPort (), ReceivePort ())
+poolStart rs = do
   (sp, rp) <- newChan
   (sig, rSig) <- newChan
-  let poolStart = \rs -> runWorkerPool (testProcess sig rp) 2 OnInit LRU rs
+  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 2 OnInit LRU rs :: Process (ResourcePool Worker)
+  return (pool, sp, rSig)
 
-  pool <- Pool.start (poolStart Release) :: Process (ResourcePool Worker)
+clientDeathTriggersPolicyApplication :: ReclamationStrategy
+                                     -> (ProcessId -> Worker -> Process (ResourcePool Worker -> Process ()))
+                                     -> (PoolStats -> Process ())
+                                     -> Process ()
+clientDeathTriggersPolicyApplication strat hExpr sExpr = do
+  (pool, sp, rSig) <- poolStart strat
 
   -- OnInit means both workers will start up whilst the pool is initialising...
   replicateM 2 $ receiveChan rSig
@@ -133,105 +140,80 @@ clientDeathTriggersPolicyApplication = do
     unsafeSendChan cs w1
     expect
 
-  hW1 <- receiveChan cr
-
-  liftIO $ putStrLn $ "hW1 = " ++ (show hW1)
-
-  -- kill the client goodbye, then ensure the resource is released
-  mRef <- monitor client
-  kill client "fubu"
-  void $ waitForDown mRef
+  after <- hExpr client =<< receiveChan cr
 
   -- although this is a /bit/ racy, 2 seconds is probably enough for the
   -- pool to have noticed the client's death and released the resource
   sleep $ seconds 2
 
-  ps <- stats pool
+  stats pool >>= sExpr
 
-  (activeResources ps) `shouldBe` equalTo 0
-  (inactiveResources ps) `shouldBe` equalTo 2
-  (activeClients ps) `shouldBe` equalTo 0
+  after pool
 
-  liftIO $ putStrLn $ "stats: " ++ (show ps)
+releaseShouldFreeUpResourceOnClientDeath = do
+  clientDeathTriggersPolicyApplication Release checkWorker checkStats
+  where
+    checkWorker client _ = do
+      -- kiss the client goodbye, then ensure the resource is released
+      mRef <- monitor client
+      kill client "fubu"
+      void $ waitForDown mRef
 
-  pool' <- Pool.start (poolStart Destroy) :: Process (ResourcePool Worker)
+      return (const $ return ())
 
-  -- OnInit means both workers will start up whilst the pool is initialising...
-  replicateM 2 $ receiveChan rSig
+    checkStats ps = do
+      (activeResources ps)   `shouldBe` equalTo 0
+      (inactiveResources ps) `shouldBe` equalTo 2
+      (activeClients ps)     `shouldBe` equalTo 0
 
-  -- spawn a process to act as the client and ensure it has
-  -- acquired the resource before we proceed
-  client' <- spawnLocal $ do
-    w1 <- acquireResource pool'
-    unsafeSendChan cs w1
-    expect
+destroyShouldDeleteResourceOnClientDeath :: Process ()
+destroyShouldDeleteResourceOnClientDeath = do
+  clientDeathTriggersPolicyApplication Destroy checkWorker checkStats
 
-  hW2 <- receiveChan cr
+  where
+    checkWorker client' hW2 = do
+      Just pw2 <- resolve hW2
+      mW2 <- monitor pw2
 
-  liftIO $ putStrLn $ "hW2 = " ++ (show hW2)
+      -- kiss the client goodbye, then ensure the resource is released
+      mRef' <- monitor client'
+      kill client' "fubu"
+      void $ waitForDown mRef'
+      void $ waitForDown mW2
 
-  Just pw2 <- resolve hW2
-  mW2 <- monitor pw2
+      return (const $ return ())
 
-  -- kill the client goodbye, then ensure the resource is released
-  mRef' <- monitor client'
-  kill client' "fubu"
-  liftIO $ putStrLn $ "client dead " ++ (show client')
-  void $ waitForDown mRef'
-  void $ waitForDown mW2
+    checkStats ps = do
+      (activeResources ps)   `shouldBe` equalTo 0
+      (inactiveResources ps) `shouldBe` equalTo 1
+      (activeClients ps)     `shouldBe` equalTo 0
 
-  -- although this is a /bit/ racy, 2 seconds is probably enough for the
-  -- pool to have noticed the client's death and released the resource
-  sleep $ seconds 2
+permLockShouldStashTheLockedResourceAndDestroyItOnlyOnShutdown :: Process ()
+permLockShouldStashTheLockedResourceAndDestroyItOnlyOnShutdown = do
+  clientDeathTriggersPolicyApplication PermLock checkWorker checkStats
+  where
+    checkWorker client hW2 = do
+      Just pw3 <- resolve hW2
+      mW3 <- monitor pw3
 
-  ps' <- stats pool'
+      -- kill the client goodbye, then ensure the resource is released
+      mRef <- monitor client
+      kill client "fubu"
+      void $ waitForDown mRef
 
-  (activeResources ps') `shouldBe` equalTo 0
-  (inactiveResources ps') `shouldBe` equalTo 1
-  (activeClients ps') `shouldBe` equalTo 0
+      return (checkAfter mW3)
 
-  liftIO $ putStrLn $ "stats: " ++ (show ps')
+    checkStats ps = do
+      (activeResources ps)   `shouldBe` equalTo 0
+      (inactiveResources ps) `shouldBe` equalTo 1
+      (lockedResources ps)   `shouldBe` equalTo 1
+      (activeClients ps)     `shouldBe` equalTo 0
 
-  pool'' <- Pool.start (poolStart PermLock) :: Process (ResourcePool Worker)
+    checkAfter mRef pool = do
+      exitProc pool Shutdown
 
-  -- OnInit means both workers will start up whilst the pool is initialising...
-  replicateM 2 $ receiveChan rSig
-
-  -- spawn a process to act as the client and ensure it has
-  -- acquired the resource before we proceed
-  client'' <- spawnLocal $ do
-    w1 <- acquireResource pool''
-    unsafeSendChan cs w1
-    expect
-
-  hW3 <- receiveChan cr
-
-  liftIO $ putStrLn $ "hW3 = " ++ (show hW3)
-
-  Just pw3 <- resolve hW2
-  mW3 <- monitor pw3
-
-  -- kill the client goodbye, then ensure the resource is released
-  mRef'' <- monitor client''
-  kill client'' "fubu"
-  liftIO $ putStrLn $ "client dead " ++ (show client'')
-  void $ waitForDown mRef''
-
-  sleep $ seconds 2
-
-  ps'' <- stats pool''
-
-  (activeResources ps'') `shouldBe` equalTo 0
-  (inactiveResources ps'') `shouldBe` equalTo 1
-  (lockedResources ps'') `shouldBe` equalTo 1
-  (activeClients ps'') `shouldBe` equalTo 0
-
-  liftIO $ putStrLn $ "stats: " ++ (show ps'')
-
-  exitProc pool'' Shutdown
-
-  -- on shutdown, the pool should destroy even PermLock'ed resources
-  void $ waitForDown mW3
+      -- on shutdown, the pool should destroy even PermLock'ed resources
+      void $ waitForDown mRef
 
 waitForDown :: MonitorRef -> Process DiedReason
 waitForDown ref =
@@ -252,8 +234,12 @@ tests transport = do
          (delayedAssertion
           "expected the backend to manage API calls"
           localNode () testPoolBackend)
-       , testCase "Client Death Handling"
-         (runProcess localNode clientDeathTriggersPolicyApplication)
+       , testCase "Release After Client Death"
+         (runProcess localNode releaseShouldFreeUpResourceOnClientDeath)
+       , testCase "Destroy After Client Death"
+         (runProcess localNode destroyShouldDeleteResourceOnClientDeath)
+       , testCase "PermLock After Client Death"
+         (runProcess localNode permLockShouldStashTheLockedResourceAndDestroyItOnlyOnShutdown)
        ]
     ]
 

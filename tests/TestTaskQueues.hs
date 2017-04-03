@@ -60,7 +60,7 @@ waitForDown ref =
 
 startPool :: SizeLimit -> Process ProcessId
 startPool sz = spawnLocal $ do
-  Pool.start (pool sz :: Process (InitResult (BlockingQueue String)))
+  Pool.start (mkQueue sz :: Process (InitResult (BlockingQueue String)))
 
 testSimplePoolJobBlocksCaller :: TestResult (AsyncResult (Either ExitReason String))
                               -> Process ()
