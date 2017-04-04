@@ -151,28 +151,6 @@ clientDeathTriggersPolicyApplication strat hExpr sExpr = do
 
   after pool
 
-rotationPolicyApplication :: Rotation -> Process ()
-rotationPolicyApplication pol = do
-  (sp, rp) <- newChan
-  (sig, rSig) <- newChan
-  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 3 OnInit pol Destroy :: Process (ResourcePool Worker)
-
-  rs <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
-  void $ mapM (releaseResource pool) rs
-  rs' <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
-
-  case pol of
-    LRU -> rs `shouldBe` equalTo rs'
-    MRU -> rs `shouldBe` equalTo (reverse rs')
-
-  exitProc pool Shutdown
-
-rotationLRU :: Process ()
-rotationLRU = rotationPolicyApplication (LRU :: Rotation)
-
-rotationMRU :: Process ()
-rotationMRU = rotationPolicyApplication (MRU :: Rotation)
-
 releaseShouldFreeUpResourceOnClientDeath = do
   clientDeathTriggersPolicyApplication Release checkWorker checkStats
   where
@@ -237,6 +215,28 @@ permLockShouldStashTheLockedResourceAndDestroyItOnlyOnShutdown = do
 
       -- on shutdown, the pool should destroy even PermLock'ed resources
       void $ waitForDown mRef
+
+rotationPolicyApplication :: Rotation -> Process ()
+rotationPolicyApplication pol = do
+  (sp, rp) <- newChan
+  (sig, rSig) <- newChan
+  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 3 OnInit pol Destroy :: Process (ResourcePool Worker)
+
+  rs <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
+  void $ mapM (releaseResource pool) rs
+  rs' <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
+
+  case pol of
+    LRU -> rs `shouldBe` equalTo rs'
+    MRU -> rs `shouldBe` equalTo (reverse rs')
+
+  exitProc pool Shutdown
+
+rotationLRU :: Process ()
+rotationLRU = rotationPolicyApplication (LRU :: Rotation)
+
+rotationMRU :: Process ()
+rotationMRU = rotationPolicyApplication (MRU :: Rotation)
 
 waitForDown :: MonitorRef -> Process DiedReason
 waitForDown ref =
