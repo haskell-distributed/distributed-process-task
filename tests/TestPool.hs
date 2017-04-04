@@ -21,9 +21,10 @@ import qualified Control.Distributed.Process.Task.Pool as Pool (start)
 import Control.Distributed.Process.Task.Pool.WorkerPool
  ( runWorkerPool
  , Worker
+ , Rotation
  )
 import Control.Rematch (equalTo)
-import Control.Monad (replicateM, void)
+import Control.Monad (replicateM, void, mapM)
 import Control.Monad.Catch (catch)
 import Data.List
  ( elemIndex
@@ -68,14 +69,14 @@ testPoolBackend result = do
   liftIO $ putStrLn "Pool started"
 
   -- no worker should've started yet
-  thing <- catch (receiveChanTimeout (asTimeout $ seconds 2) rSig) (\(ex :: SomeException) -> (liftIO $ putStrLn (show ex)) >> terminate)
+  thing <- receiveChanTimeout (asTimeout $ seconds 2) rSig
 
   liftIO $ putStrLn $ "Thing = " ++ (show thing)
 
   thing `shouldBe` equalTo Nothing
 
   -- OnDemand means we'll see a worker process start up
-  w1 <- catchExit (acquireResource pool) (\_ (er :: ExitReason) -> (liftIO $ putStrLn (show er)) >> terminate)
+  w1 <- acquireResource pool
 
   liftIO $ putStrLn $ "w1 = " ++ (show w1)
 
@@ -149,6 +150,28 @@ clientDeathTriggersPolicyApplication strat hExpr sExpr = do
   stats pool >>= sExpr
 
   after pool
+
+rotationPolicyApplication :: Rotation -> Process ()
+rotationPolicyApplication pol = do
+  (sp, rp) <- newChan
+  (sig, rSig) <- newChan
+  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 3 OnInit pol Destroy :: Process (ResourcePool Worker)
+
+  rs <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
+  void $ mapM (releaseResource pool) rs
+  rs' <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
+
+  case pol of
+    LRU -> rs `shouldBe` equalTo rs'
+    MRU -> rs `shouldBe` equalTo (reverse rs')
+
+  exitProc pool Shutdown
+
+rotationLRU :: Process ()
+rotationLRU = rotationPolicyApplication (LRU :: Rotation)
+
+rotationMRU :: Process ()
+rotationMRU = rotationPolicyApplication (MRU :: Rotation)
 
 releaseShouldFreeUpResourceOnClientDeath = do
   clientDeathTriggersPolicyApplication Release checkWorker checkStats
@@ -240,6 +263,10 @@ tests transport = do
          (runProcess localNode destroyShouldDeleteResourceOnClientDeath)
        , testCase "PermLock After Client Death"
          (runProcess localNode permLockShouldStashTheLockedResourceAndDestroyItOnlyOnShutdown)
+       , testCase "LRU Rotation Policy"
+         (runProcess localNode rotationLRU)
+       , testCase "MRU Rotation Policy"
+         (runProcess localNode rotationMRU)
        ]
     ]
 

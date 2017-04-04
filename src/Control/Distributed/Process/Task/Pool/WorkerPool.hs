@@ -30,6 +30,7 @@ module Control.Distributed.Process.Task.Pool.WorkerPool
  , runWorkerPool
  , Worker
  , PoolSize
+ , Rotation
  ) where
 
 import Control.DeepSeq (NFData)
@@ -80,6 +81,8 @@ import GHC.Generics
 
 type PoolSize = Integer
 
+type Rotation = RotationPolicy WPState Worker
+
 newtype Worker = Worker { unWorker :: (ProcessId, MonitorRef) }
   deriving (Typeable, Generic, Ord, Show)
 
@@ -125,7 +128,7 @@ workerRefs = accessor monitors (\ms' wps -> wps { monitors = ms' })
 runWorkerPool :: Process ()
               -> PoolSize
               -> InitPolicy
-              -> RotationPolicy WPState Worker
+              -> Rotation
               -> ReclamationStrategy
               -> Process ()
 runWorkerPool rt sz ip rp rs = runPool (worker rt) poolDef ip rp rs (initState sz)

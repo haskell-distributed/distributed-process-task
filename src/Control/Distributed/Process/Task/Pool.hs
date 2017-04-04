@@ -84,7 +84,7 @@ import Control.Distributed.Process.Task.Pool.Internal.Types
  , Pool
  )
 -- import Control.Distributed.Process.Supervisor (SupervisorPid)
-import Control.Monad.Catch (finally)
+import Control.Monad.Catch (finally, mask)
 
 --------------------------------------------------------------------------------
 -- Client Facing API                                                          --
@@ -95,7 +95,10 @@ transaction :: forall a r. (Referenced r)
         -> (r -> Process a)
         -> Process a
 transaction pool proc = do
-  acquireResource pool >>= \r -> proc r `finally` releaseResource pool r
+  mask $ \restore -> do
+    r <- acquireResource pool
+    finally (restore $ proc r)
+            (releaseResource pool r)
 
 checkOut :: forall r. (Referenced r) => ResourcePool r -> Process r
 checkOut = acquireResource
