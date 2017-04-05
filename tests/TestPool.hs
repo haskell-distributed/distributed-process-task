@@ -5,14 +5,11 @@
 
 module Main where
 
-import Control.Exception (SomeException)
 import Control.Distributed.Process hiding (call, catch)
 import Control.Distributed.Process.Async
-import Control.Distributed.Process.Closure
 import Control.Distributed.Process.Extras (__remoteTable)
 import Control.Distributed.Process.Extras.Time
 import Control.Distributed.Process.Extras.Timer
-import Control.Distributed.Process.Extras.Internal.Primitives (forever')
 import Control.Distributed.Process.Extras.Internal.Types
 import Control.Distributed.Process.Node
 import Control.Distributed.Process.SysTest.Utils
@@ -25,17 +22,6 @@ import Control.Distributed.Process.Task.Pool.WorkerPool
  )
 import Control.Rematch (equalTo)
 import Control.Monad (replicateM, void, mapM)
-import Control.Monad.Catch (catch)
-import Data.List
- ( elemIndex
- )
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
- ( empty
- , insert
- , lookup
- )
-
 import Test.Framework (Test, defaultMain, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 -- import TestUtils
@@ -45,7 +31,6 @@ import qualified Network.Transport as NT
 
 testProcess :: SendPort () -> ReceivePort () -> Process ()
 testProcess sp rp = do
-  liftIO $ putStrLn "worker starting up"
   sendChan sp () >> go
   where
     go = do
@@ -62,23 +47,18 @@ testPoolBackend :: TestResult () -> Process ()
 testPoolBackend result = do
   (sp, rp) <- newChan
   (sig, rSig) <- newChan
-  let poolStart = runWorkerPool (testProcess sig rp) 1 OnDemand LRU Destroy
+  let ps = runWorkerPool (testProcess sig rp) 1 OnDemand LRU Destroy
 
-  pool <- Pool.start poolStart :: Process (ResourcePool Worker)
-
-  liftIO $ putStrLn "Pool started"
+  pool <- Pool.start ps :: Process (ResourcePool Worker)
 
   -- no worker should've started yet
   thing <- receiveChanTimeout (asTimeout $ seconds 2) rSig
-
-  liftIO $ putStrLn $ "Thing = " ++ (show thing)
 
   thing `shouldBe` equalTo Nothing
 
   -- OnDemand means we'll see a worker process start up
   w1 <- acquireResource pool
 
-  liftIO $ putStrLn $ "w1 = " ++ (show w1)
 
   -- which means we'll get a signal
   () <- receiveChan rSig
@@ -93,21 +73,15 @@ testPoolBackend result = do
   res <- waitCancelTimeout (asTimeout $ seconds 3) =<< acquireAsync
   res `shouldBe` equalTo (AsyncCancelled :: AsyncResult Worker)
 
-  liftIO $ putStrLn "Cancellation worked as expected"
-
   hAsync <- acquireAsync
   res' <- waitCheckTimeout (asTimeout $ seconds 3) hAsync
   res' `shouldBe` equalTo (AsyncPending :: AsyncResult Worker)
-
-  liftIO $ putStrLn "Pending set as expected"
 
   -- if we make the first worker terminate, we should have access to the second...
   sendChan sp ()
 
   -- and we see acquireResource complete on the second request...
   Just (AsyncDone w2) <- waitTimeout (asTimeout $ seconds 5) hAsync
-
-  liftIO $ putStrLn $ "w2 = " ++ (show w2)
 
   -- which means we'll get a start signal again
   receiveChan rSig >>= stash result
@@ -128,7 +102,7 @@ clientDeathTriggersPolicyApplication :: ReclamationStrategy
                                      -> (PoolStats -> Process ())
                                      -> Process ()
 clientDeathTriggersPolicyApplication strat hExpr sExpr = do
-  (pool, sp, rSig) <- poolStart strat
+  (pool, _, rSig) <- poolStart strat
 
   -- OnInit means both workers will start up whilst the pool is initialising...
   replicateM 2 $ receiveChan rSig
@@ -141,7 +115,7 @@ clientDeathTriggersPolicyApplication strat hExpr sExpr = do
     unsafeSendChan cs w1
     expect
 
-  after <- hExpr client =<< receiveChan cr
+  teardown' <- hExpr client =<< receiveChan cr
 
   -- although this is a /bit/ racy, 2 seconds is probably enough for the
   -- pool to have noticed the client's death and released the resource
@@ -149,8 +123,9 @@ clientDeathTriggersPolicyApplication strat hExpr sExpr = do
 
   stats pool >>= sExpr
 
-  after pool
+  teardown' pool
 
+releaseShouldFreeUpResourceOnClientDeath :: Process ()
 releaseShouldFreeUpResourceOnClientDeath = do
   clientDeathTriggersPolicyApplication Release checkWorker checkStats
   where
@@ -218,8 +193,8 @@ permLockShouldStashTheLockedResourceAndDestroyItOnlyOnShutdown = do
 
 rotationPolicyApplication :: Rotation -> Process ()
 rotationPolicyApplication pol = do
-  (sp, rp) <- newChan
-  (sig, rSig) <- newChan
+  (_, rp) <- newChan
+  (sig, _) <- newChan
   pool <- Pool.start $ runWorkerPool (testProcess sig rp) 3 OnInit pol Destroy :: Process (ResourcePool Worker)
 
   rs <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
@@ -229,6 +204,7 @@ rotationPolicyApplication pol = do
   case pol of
     LRU -> rs `shouldBe` equalTo rs'
     MRU -> rs `shouldBe` equalTo (reverse rs')
+    _   -> return ()
 
   exitProc pool Shutdown
 
@@ -237,6 +213,47 @@ rotationLRU = rotationPolicyApplication (LRU :: Rotation)
 
 rotationMRU :: Process ()
 rotationMRU = rotationPolicyApplication (MRU :: Rotation)
+
+transferingResources :: Process ()
+transferingResources = do
+  (_, rp) <- newChan
+  (sig, _) <- newChan
+  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 3 OnInit MRU Destroy :: Process (ResourcePool Worker)
+
+  parent <- getSelfPid
+
+  client <- spawnLocal $ do
+    hRes' <- acquireResource pool
+    send parent hRes'
+    expect
+
+  hRes <- expect :: Process Worker
+
+  r1 <- transfer pool parent hRes client
+  r1 `shouldBe` equalTo InvalidOwner
+
+  mRef <- monitor client
+  kill client "see ya"
+  void $ waitForDown mRef
+
+  sleep $ seconds 4
+
+  r2 <- transfer pool parent hRes client
+  r2 `shouldBe` equalTo InvalidResource
+
+  client' <- spawnLocal $ do
+    (p, r) <- receiveWait [ matchIf (\(p, (_ :: Worker)) -> p == parent) return ]
+    send p r
+    expect
+
+  res <- acquireResource pool
+  r3 <- transferTo pool res client'
+  r3 `shouldBe` equalTo (Transfered client')
+
+  r4 <- transfer pool parent res client'
+  r4 `shouldBe` equalTo InvalidOwner
+
+  exitProc pool Shutdown
 
 waitForDown :: MonitorRef -> Process DiedReason
 waitForDown ref =
@@ -267,6 +284,8 @@ tests transport = do
          (runProcess localNode rotationLRU)
        , testCase "MRU Rotation Policy"
          (runProcess localNode rotationMRU)
+       , testCase "Transfering Resources"
+         (runProcess localNode transferingResources)
        ]
     ]
 

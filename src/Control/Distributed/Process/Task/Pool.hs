@@ -42,6 +42,7 @@ module Control.Distributed.Process.Task.Pool
  , checkOut
  , checkIn
  , transfer
+ , transferTo
  , stats
  , start
    -- Defining A Pool Backend
@@ -51,6 +52,7 @@ module Control.Distributed.Process.Task.Pool
  , InitPolicy(..)
  , RotationPolicy(..)
  , ReclamationStrategy(..)
+ , TransferResponse(..)
  ) where
 
 import Control.Distributed.Process
@@ -60,11 +62,12 @@ import Control.Distributed.Process
   , spawnLocal
   , getSelfPid
   )
-import Control.Distributed.Process.ManagedProcess.Client
+import Control.Distributed.Process.ManagedProcess.UnsafeClient
   ( callChan
   , cast
   , call
   )
+import qualified Control.Distributed.Process.ManagedProcess.Client as SafeClient (call)
 import qualified Control.Distributed.Process.Task.Pool.WorkerPool as WorkerPool
 import qualified Control.Distributed.Process.Task.Pool.Backend as Backend
 import Control.Distributed.Process.Task.Pool.Internal.Types
@@ -75,6 +78,8 @@ import Control.Distributed.Process.Task.Pool.Internal.Types
  , ReclamationStrategy(..)
  , AcquireResource(..)
  , ReleaseResource(..)
+ , TransferRequest(..)
+ , TransferResponse(..)
  , StatsReq(..)
  , PoolStats(..)
  , PoolStatsInfo(..)
@@ -121,14 +126,23 @@ releaseResource pool res = getSelfPid >>= cast pool . ReleaseResource res
 stats :: forall r . Referenced r
          => ResourcePool r
          -> Process PoolStats
-stats pool = call pool StatsReq
+stats pool = SafeClient.call pool StatsReq
 
-transfer :: forall r. (Referenced r)
+transferTo :: forall r. (Referenced r)
+           => ResourcePool r
+           -> r
+           -> ProcessId
+           -> Process TransferResponse
+transferTo pool res pid = getSelfPid >>= \us -> transfer pool us res pid
+
+transfer :: forall r . (Referenced r)
          => ResourcePool r
+         -> ProcessId
          -> r
          -> ProcessId
-         -> Process ()
-transfer = undefined
+         -> Process TransferResponse
+transfer pool old res new = call pool $ TransferRequest res new old
+
 
 --------------------------------------------------------------------------------
 -- Starting/Running a Resource Pool                                           --

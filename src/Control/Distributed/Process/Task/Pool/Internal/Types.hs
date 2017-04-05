@@ -42,6 +42,8 @@ module Control.Distributed.Process.Task.Pool.Internal.Types
    ResourcePool(..)
  , AcquireResource(..)
  , ReleaseResource(..)
+ , TransferRequest(..)
+ , TransferResponse(..)
  , StatsReq(..)
    -- Statistics
  , PoolStats(..)
@@ -112,7 +114,7 @@ data ResourcePool r = ResourcePool { poolAddr :: !ProcessId }
   deriving (Typeable, Generic, Eq, Show)
 instance (Serializable r) => Binary (ResourcePool r) where
 instance (NFData r) => NFData (ResourcePool r) where
-instance (Serializable r, NFData r) => NFSerializable (ResourcePool r) where
+instance (Referenced r) => NFSerializable (ResourcePool r) where
 
 instance Linkable (ResourcePool r) where
   linkTo = link . poolAddr
@@ -126,25 +128,37 @@ instance Routable (ResourcePool r) where
 
 instance Addressable (ResourcePool r)
 
-class (Serializable r, Hashable r, Eq r, Ord r, Show r) => Referenced r
-instance (Serializable r, Hashable r, Eq r, Ord r, Show r) => Referenced r
+class (NFSerializable r, Hashable r, Eq r, Ord r, Show r) => Referenced r
+instance (NFSerializable r, Hashable r, Eq r, Ord r, Show r) => Referenced r
 
 data AcquireResource = AcquireResource ProcessId
   deriving (Typeable, Generic, Eq, Show)
 instance Binary AcquireResource where
 instance NFData AcquireResource where
-instance NFSerializable AcquireResource
 
 data ReleaseResource r = ReleaseResource r ProcessId
   deriving (Typeable, Generic)
 instance (Serializable r) => Binary (ReleaseResource r) where
 instance (NFData r) => NFData (ReleaseResource r) where
-instance (Serializable r, NFData r) => NFSerializable (ReleaseResource r)
+
+data TransferRequest r = TransferRequest { resourceHandle :: r
+                                         , newOwner       :: ProcessId
+                                         , currentOwner   :: ProcessId
+                                         }
+  deriving (Typeable, Generic)
+instance (Serializable r) => Binary (TransferRequest r) where
+instance (NFData r) => NFData (TransferRequest r) where
+
+data TransferResponse = Transfered { location :: ProcessId }
+                      | InvalidResource
+                      | InvalidOwner
+ deriving (Typeable, Generic, Eq, Show)
+instance Binary TransferResponse where
+instance NFData TransferResponse where
 
 data StatsReq = StatsReq deriving (Typeable, Generic)
 instance Binary StatsReq where
 instance NFData StatsReq where
-instance NFSerializable StatsReq
 
 data Ticket r = Ticket { ticketOwner :: ProcessId
                        , ticketChan  :: SendPort r

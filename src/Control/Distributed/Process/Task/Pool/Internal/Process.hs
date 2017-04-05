@@ -59,12 +59,10 @@ import Control.Distributed.Process
   , ProcessMonitorNotification(..)
   , ProcessId
   , SendPort
-  , unsafeSendChan
   , Message
   , monitor
   , unmonitor
   , unsafeWrapMessage
-  , liftIO
   )
 import Control.Distributed.Process.Extras.Internal.Queue.SeqQ (SeqQ)
 import qualified Control.Distributed.Process.Extras.Internal.Queue.SeqQ as Queue
@@ -81,6 +79,7 @@ import Control.Distributed.Process.ManagedProcess
   , handleCall
   , continue
   , reply
+  , replyWith
   , defaultProcess
   , exitState
   , InitHandler
@@ -88,7 +87,6 @@ import Control.Distributed.Process.ManagedProcess
   , InitResult(..)
   , ProcessAction
   , ProcessDefinition(..)
-  , UnhandledMessagePolicy(..)
   , ExitState
   )
 import qualified Control.Distributed.Process.ManagedProcess as MP
@@ -224,6 +222,7 @@ processDefinition =
   defaultProcess { apiHandlers     = [ handleRpcChan handleAcquire
                                      , handleCast    handleRelease
                                      , handleCall    handleGetStats
+                                     , handleCall    handleTransfer
                                      ]
                  , infoHandlers    = [ handleInfo handleMonitorSignal
                                      , handleRaw  backendInfoCall
@@ -237,13 +236,10 @@ handleAcquire :: forall s r. (Referenced r)
               -> AcquireResource
               -> Process (ProcessAction (State s r))
 handleAcquire clientPort st@State{..} (AcquireResource pid) = do
-  liftIO $ putStrLn "acquiring resource"
   (take', pst) <- runPoolStateT (st ^. poolState) (acquire (st ^. poolBackend))
-  liftIO $ putStrLn $ "acquired " ++ (show take')
   st' <- case Map.lookup pid (st ^. monitors) of
            Just _  -> return $ (poolState ^= pst) st
            Nothing -> monitor pid >>= \mRef -> do
-                        liftIO $ putStrLn $ "monitoring " ++ (show (pid, mRef))
                         return $ ( (monitors ^: Map.insert pid mRef)
                                  . (poolState ^= pst)
                                  $ st
@@ -286,6 +282,29 @@ handleGetStats st StatsReq = do
   where
     lengths (ResourceQueue a b) = (Seq.length a, Set.size b)
 
+handleTransfer :: forall s r . (Referenced r)
+               => CallHandler (State s r) (TransferRequest r) TransferResponse
+handleTransfer st TransferRequest{..} =
+  {-
+  let (rs, mm) = maybe [] id $ MultiMap.delete currentOwner (st ^. clients)
+  if resourceHandle `elem` rs
+    then let rs' = List.delete resourceHandle rs
+         let mm' = foldl (MultiMap.insert currentOwner) mm rs'
+         let mp  = MultiMap.insert newOwner resourceHandle mm'
+         continue ((clients ^= mp) st) >>= replyWith ResorceTransfered newOwner
+    else reply InvalidResource
+  -}
+  let (r, m) = MultiMap.foldrWithKey mkResp (InvalidResource, MultiMap.empty) (st ^. clients)
+  in continue ((clients ^= m) st) >>= replyWith r
+  where
+    mkResp pid res (resp, acc)
+      | pid == currentOwner
+      , res == resourceHandle = (Transfered newOwner,
+                                  MultiMap.insert newOwner res acc)
+      | pid /= currentOwner
+      , res == resourceHandle = (InvalidOwner, MultiMap.insert pid res acc)
+      | otherwise             = (resp, MultiMap.insert pid res acc)
+
 dequeuePending :: forall s r . (Referenced r)
                => State s r
                -> Process (ProcessAction (State s r))
@@ -320,7 +339,7 @@ handleMonitorSignal st mSig@(ProcessMonitorNotification _ pid _) = do
   let st' = (monitors ^: Map.delete pid) st
   let mp = MultiMap.delete pid (st' ^. clients)
   case mp of
-    Nothing       -> (\s -> (liftIO $ putStrLn "ignoring monitor") >> handoffToBackend mSig s) =<< clearTickets pid st
+    Nothing       -> handoffToBackend mSig =<< clearTickets pid st
     Just (rs, q') -> applyReclamationStrategy pid (HashSet.fromList rs) $ (clients ^= q') st'
 
 handleShutdown :: forall s r . ExitState (State s r) -> ExitReason -> Process ()
@@ -362,10 +381,10 @@ clearTickets pid st@State{..} = do
     _ | sz > sz'  = return $ (stats .> waiting ^: (-(sz - sz'))) $ st'
       | sz == sz' = return st'
       | otherwise = die $ ExitOther $ baseErr ++ ":clearTickets-ResizeInvalid"
-  -}
 
 baseErr :: String
 baseErr = baseErrorMessage ++ ".Internal.Process"
+  -}
 
 applyReclamationStrategy :: forall s r . (Referenced r)
                          => ProcessId
@@ -385,14 +404,11 @@ applyReclamationStrategy pid rs st@State{..} =
                $ st' )
 
     doDestroy rs' st' = do
-      liftIO $ putStrLn "doDestroy"
       (_, pst) <- runPoolStateT (st' ^. poolState) (forM_ (HashSet.toList rs') dispose')
       return $ ( (poolState ^= pst)
                $ st' )
 
     doPermLock rs' st' = do
-
-      liftIO $ putStrLn "doPermLock"
       (_, pst) <- runPoolStateT (st' ^. poolState) (forM_ (HashSet.toList rs') release')
 
       return $ ( (locked ^: Set.union (Set.fromList (HashSet.toList rs')))

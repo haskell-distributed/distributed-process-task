@@ -12,7 +12,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/haskell-distributed/distributed-process-extras.git
-    commit: 8a2ea856a8884dfef05167a24b38fac023d1991c
+    commit: 2645f105959342eb647cf3706b297b9baf9cec33
   extra-dep: true
 
 extra-deps:

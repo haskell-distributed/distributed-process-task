@@ -80,7 +80,6 @@ import Data.Rank1Typeable (typeOf)
 import GHC.Generics
 
 type PoolSize = Integer
-
 type Rotation = RotationPolicy WPState Worker
 
 newtype Worker = Worker { unWorker :: (ProcessId, MonitorRef) }
@@ -91,7 +90,6 @@ instance Eq Worker where
 
 instance Binary Worker where
 instance NFData Worker where
-instance NFSerializable Worker
 instance Hashable Worker where
 
 instance Linkable Worker where
@@ -154,8 +152,6 @@ apiAcquire = do
   pol <- getInitPolicy
   sz  <- getLimit
   (a, b) <- resourceQueueLen
-  lift $ liftIO $ putStrLn $ "resource q = " ++ (show ((a, b), sz))
-
   maybeAcquire pol (toInteger a) (toInteger b) sz
 
   where
@@ -216,7 +212,6 @@ apiInfoCall msg = do
     checkRefs (ProcessMonitorNotification r p _) = do
       mRefs <- getState >>= return . (^. workerRefs)
       when (HashSet.member r mRefs) $ do
-        lift $ liftIO $ putStrLn "deleting worker"
         modifyState (workerRefs ^: HashSet.delete r)
         deletePooledResource $ Worker (p, r)
 
