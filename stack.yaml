@@ -1,23 +1,23 @@
-resolver: nightly-2017-02-03
+resolver: lts-11.13
 
 packages:
 - '.'
 - location:
-    git: https://github.com/haskell-distributed/distributed-process-client-server.git
-    commit: 22fa1dc33b73a10fb82e949dd5323f147f2017ec
-  extra-dep: true
-- location:
-    git: https://github.com/haskell-distributed/distributed-process-supervisor.git
-    commit: bf2b5b06ed400ecc5906d4ef9a0c172810488435
-  extra-dep: true
-- location:
-    git: https://github.com/haskell-distributed/distributed-process-extras.git
-    commit: 2645f105959342eb647cf3706b297b9baf9cec33
+    git: https://github.com/haskell-distributed/distributed-process-systest.git
+    commit: b4a6b646adb6c81725ddac4babcfc21b86944d98
   extra-dep: true
 
 extra-deps:
-- rank1dynamic-0.3.3.0
-- distributed-process-0.6.6         # missing snapshot
-- distributed-process-async-0.2.4   # missing snapshot
-- distributed-process-systest-0.1.1 # missing prior to Jan-2017
+- ansi-terminal-0.6.3.1
+- network-transport-0.5.2
+- network-transport-tcp-0.6.0
+- network-transport-inmemory-0.5.2
+- distributed-process-0.7.4         # missing snapshot
 - rematch-0.2.0.0
+- distributed-process-extras-0.3.5
+- distributed-process-async-0.2.6
+- distributed-process-supervisor-0.2.1
+- exceptions-0.10.0
+- rank1dynamic-0.4.0
+- distributed-static-0.3.8
+- distributed-process-client-server-0.2.5.1

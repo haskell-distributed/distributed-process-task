@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE TupleSections       #-}
 
 module Main where
 
@@ -296,6 +297,6 @@ main = testMain $ tests
 testMain :: (NT.Transport -> IO [Test]) -> IO ()
 testMain builder = do
   Right (transport, _) <- createTransportExposeInternals
-                                    "127.0.0.1" "0" defaultTCPParameters
+                          "127.0.0.1" "0" ("127.0.0.1",) defaultTCPParameters
   testData <- builder transport
   defaultMain testData
