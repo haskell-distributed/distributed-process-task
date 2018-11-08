@@ -22,6 +22,11 @@
 module Control.Distributed.Process.Task
   ( -- * Task Queues
     module Control.Distributed.Process.Task.Queue.BlockingQueue
-  ) where
+    -- * Pools and the pool backend
+  , module Control.Distributed.Process.Task.Pool.WorkerPool
+  , module Control.Distributed.Process.Task.Pool
+    ) where
 
 import Control.Distributed.Process.Task.Queue.BlockingQueue
+import Control.Distributed.Process.Task.Pool
+import Control.Distributed.Process.Task.Pool.WorkerPool

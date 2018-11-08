@@ -33,10 +33,10 @@ module Control.Distributed.Process.Task.Queue.BlockingQueue
   ( BlockingQueue()
   , SizeLimit
   , BlockingQueueStats(..)
-  , start
+  , startQueue
   , mkQueue
   , executeTask
-  , stats
+  , queueStats
   ) where
 
 import Control.Distributed.Process hiding (call)
@@ -105,10 +105,10 @@ data BlockingQueue a = BlockingQueue {
 
 -- | Start a queue with an upper bound on the # of concurrent tasks.
 --
-start :: forall a . (Serializable a)
-         => Process (InitResult (BlockingQueue a))
-         -> Process ()
-start init' = ManagedProcess.serve () (\() -> init') poolServer
+startQueue :: forall a . (Serializable a)
+           => Process (InitResult (BlockingQueue a))
+           -> Process ()
+startQueue init' = ManagedProcess.serve () (\() -> init') poolServer
   where poolServer =
           defaultProcess {
               apiHandlers = [
@@ -135,8 +135,8 @@ executeTask sid t = call sid t
 
 -- | Fetch statistics for a queue.
 --
-stats :: forall s . Addressable s => s -> Process (Maybe BlockingQueueStats)
-stats sid = tryCall sid GetStats
+queueStats :: forall s . Addressable s => s -> Process (Maybe BlockingQueueStats)
+queueStats sid = tryCall sid GetStats
 
 -- internal / server-side API
 

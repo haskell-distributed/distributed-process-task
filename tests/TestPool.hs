@@ -14,8 +14,7 @@ import Control.Distributed.Process.Extras.Timer
 import Control.Distributed.Process.Extras.Internal.Types
 import Control.Distributed.Process.Node
 import Control.Distributed.Process.SysTest.Utils
-import Control.Distributed.Process.Task.Pool hiding (start)
-import qualified Control.Distributed.Process.Task.Pool as Pool (start)
+import Control.Distributed.Process.Task.Pool
 import Control.Distributed.Process.Task.Pool.WorkerPool
  ( runWorkerPool
  , Worker
@@ -50,7 +49,7 @@ testPoolBackend result = do
   (sig, rSig) <- newChan
   let ps = runWorkerPool (testProcess sig rp) 1 OnDemand LRU Destroy
 
-  pool <- Pool.start ps :: Process (ResourcePool Worker)
+  pool <- startPool ps :: Process (ResourcePool Worker)
 
   -- no worker should've started yet
   thing <- receiveChanTimeout (asTimeout $ seconds 2) rSig
@@ -95,7 +94,7 @@ poolStart :: ReclamationStrategy
 poolStart rs = do
   (sp, rp) <- newChan
   (sig, rSig) <- newChan
-  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 2 OnInit LRU rs :: Process (ResourcePool Worker)
+  pool <- startPool $ runWorkerPool (testProcess sig rp) 2 OnInit LRU rs :: Process (ResourcePool Worker)
   return (pool, sp, rSig)
 
 clientDeathTriggersPolicyApplication :: ReclamationStrategy
@@ -122,12 +121,12 @@ clientDeathTriggersPolicyApplication strat hExpr sExpr = do
   -- pool to have noticed the client's death and released the resource
   sleep $ seconds 2
 
-  stats pool >>= sExpr
+  poolStats pool >>= sExpr
 
   teardown' pool
 
 releaseShouldFreeUpResourceOnClientDeath :: Process ()
-releaseShouldFreeUpResourceOnClientDeath = do
+releaseShouldFreeUpResourceOnClientDeath =
   clientDeathTriggersPolicyApplication Release checkWorker checkStats
   where
     checkWorker client _ = do
@@ -144,7 +143,7 @@ releaseShouldFreeUpResourceOnClientDeath = do
       (activeClients ps)     `shouldBe` equalTo 0
 
 destroyShouldDeleteResourceOnClientDeath :: Process ()
-destroyShouldDeleteResourceOnClientDeath = do
+destroyShouldDeleteResourceOnClientDeath =
   clientDeathTriggersPolicyApplication Destroy checkWorker checkStats
 
   where
@@ -196,7 +195,7 @@ rotationPolicyApplication :: Rotation -> Process ()
 rotationPolicyApplication pol = do
   (_, rp) <- newChan
   (sig, _) <- newChan
-  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 3 OnInit pol Destroy :: Process (ResourcePool Worker)
+  pool <- startPool $ runWorkerPool (testProcess sig rp) 3 OnInit pol Destroy :: Process (ResourcePool Worker)
 
   rs <- mapM (const $ acquireResource pool) ([1..3] :: [Int])
   void $ mapM (releaseResource pool) rs
@@ -219,7 +218,7 @@ transferingResources :: Process ()
 transferingResources = do
   (_, rp) <- newChan
   (sig, _) <- newChan
-  pool <- Pool.start $ runWorkerPool (testProcess sig rp) 3 OnInit MRU Destroy :: Process (ResourcePool Worker)
+  pool <- startPool $ runWorkerPool (testProcess sig rp) 3 OnInit MRU Destroy :: Process (ResourcePool Worker)
 
   parent <- getSelfPid
 

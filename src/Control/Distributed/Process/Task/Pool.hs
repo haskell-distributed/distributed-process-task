@@ -43,8 +43,8 @@ module Control.Distributed.Process.Task.Pool
  , checkIn
  , transfer
  , transferTo
- , stats
- , start
+ , poolStats
+ , startPool
    -- Defining A Pool Backend
  , module Backend
    -- Types
@@ -123,10 +123,10 @@ releaseResource :: forall r. (Referenced r)
                 -> Process ()
 releaseResource pool res = getSelfPid >>= cast pool . ReleaseResource res
 
-stats :: forall r . Referenced r
-         => ResourcePool r
-         -> Process PoolStats
-stats pool = SafeClient.call pool StatsReq
+poolStats :: forall r . Referenced r
+             => ResourcePool r
+             -> Process PoolStats
+poolStats pool = SafeClient.call pool StatsReq
 
 transferTo :: forall r. (Referenced r)
            => ResourcePool r
@@ -148,7 +148,7 @@ transfer pool old res new = call pool $ TransferRequest res new old
 -- Starting/Running a Resource Pool                                           --
 --------------------------------------------------------------------------------
 
-start :: forall r . (Referenced r)
-      => Process ()
-      -> Process (ResourcePool r)
-start p = spawnLocal p >>= return . ResourcePool
+startPool :: forall r . (Referenced r)
+          => Process ()
+          -> Process (ResourcePool r)
+startPool p = ResourcePool <$> spawnLocal p
