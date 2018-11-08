@@ -4,7 +4,6 @@ cabal-version:  >=1.8
 build-type:     Simple
 license:        BSD3
 license-file:   LICENCE
-stability:      experimental
 Copyright:      Tim Watson 2012 - 2013
 Author:         Tim Watson
 Maintainer:     Tim Watson <watson.timothy@gmail.com>
@@ -32,7 +31,7 @@ library
   build-depends:
                    base >= 4.8.2.0 && < 5,
                    data-accessor >= 0.2.2.3,
-                   distributed-process >= 0.6.6 && < 0.7,
+                   distributed-process >= 0.6.6 && < 0.8,
                    distributed-process-extras >= 0.3.1 && < 0.4,
                    distributed-process-async >= 0.2.4 && < 0.3,
                    distributed-process-client-server >= 0.2.3 && <0.3,
@@ -44,7 +43,7 @@ library
                    unordered-containers >= 0.2.3.0 && < 0.3,
                    fingertree < 0.2,
                    stm >= 2.4 && < 2.5,
-                   time > 1.4 && < 1.8,
+                   time > 1.4 && < 1.9,
                    transformers
   extensions:      CPP
   hs-source-dirs:   src
@@ -63,8 +62,8 @@ test-suite TaskQueueTests
                    hashable,
                    exceptions,
                    unordered-containers >= 0.2.3.0 && < 0.3,
-                   distributed-process >= 0.6.6 && < 0.7,
-                   distributed-process-systest >= 0.1.1 && < 0.2,
+                   distributed-process >= 0.6.6 && < 0.8,
+                   distributed-process-systest >= 0.1.1 && < 0.3,
                    distributed-process-task,
                    distributed-process-extras >= 0.3.1 && < 0.4,
                    distributed-process-async >= 0.2.4 && < 0.3,
@@ -73,15 +72,15 @@ test-suite TaskQueueTests
                    bytestring,
                    data-accessor,
                    fingertree < 0.2,
-                   network-transport >= 0.4 && < 0.5,
                    deepseq >= 1.3.0.1 && < 1.5,
                    mtl,
-                   network-transport-tcp >= 0.4 && < 0.6,
+                   network-transport >= 0.4 && < 0.6,
+                   network-transport-tcp >= 0.4 && < 0.7,
                    binary >= 0.6.3.0 && < 0.9,
                    network >= 2.3 && < 2.7,
                    HUnit >= 1.2 && < 2,
                    stm >= 2.3 && < 2.5,
-                   time > 1.4 && < 1.8,
+                   time > 1.4 && < 1.9,
                    test-framework >= 0.6 && < 0.9,
                    test-framework-hunit,
                    template-haskell,
