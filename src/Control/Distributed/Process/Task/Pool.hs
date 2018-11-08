@@ -1,11 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable         #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE PatternGuards              #-}
-{-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
@@ -99,7 +93,7 @@ transaction :: forall a r. (Referenced r)
         => ResourcePool r
         -> (r -> Process a)
         -> Process a
-transaction pool proc = do
+transaction pool proc =
   mask $ \restore -> do
     r <- acquireResource pool
     finally (restore $ proc r)
