@@ -17,7 +17,18 @@
 --
 -- =Pool (Backend) API
 --
--- This module implements the /BackingPool/ API for "Control.Distributed.Process.Task.Pool".
+-- This module implements the /backing pool/ API for "Control.Distributed.Process.Task.Pool".
+--
+-- A pool backend implements the worker handling, while the generic pool process
+-- handles the client-server protocol. This means that pool implementors can leave
+-- issues such as handling client disconnection or termination, tracking pending
+-- client requests (where resources are queued up due to high demand), and the
+-- application of initialisation, and concentrate on things such as balancing
+-- access to resources, and using feedback mechanisms to alter system behaviour
+-- at runtime.
+--
+-- The backend api is defined in functions supplied as fields of the 'PoolBackend'
+-- record type.
 --
 -----------------------------------------------------------------------------
 
@@ -87,7 +98,6 @@ import Data.Sequence
   )
 import qualified Data.Sequence as Seq (length, filter)
 import qualified Data.Set as Set (size, insert, delete)
-
 
 getState :: forall s r. Pool s r s
 getState = ST.get >>= return . internalState

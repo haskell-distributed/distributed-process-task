@@ -1,12 +1,12 @@
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE PatternGuards              #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE MonoLocalBinds             #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -42,20 +42,16 @@ import Control.Distributed.Process
   , handleMessageIf
   , unsafeSendChan
   , exit
-  , match
   , Message
   , link
-  , monitor
   , unmonitor
   , unwrapMessage
   , getSelfPid
-  , liftIO
   )
 import Control.Distributed.Process.Extras
   ( spawnMonitorLocal
   , awaitExit
   , Shutdown(..)
-  , NFSerializable
   , ExitReason(..)
   , Linkable(..)
   , Routable(..)
@@ -67,11 +63,10 @@ import Data.Accessor
  ( Accessor
  , accessor
  , (^:)
- , (^=)
- , (.>)
  , (^.)
  )
 import Data.Binary
+import Data.Foldable (forM_)
 import Data.Typeable (Typeable)
 import Data.Hashable (Hashable)
 import Data.HashSet (HashSet)
@@ -79,14 +74,18 @@ import qualified Data.HashSet as HashSet (empty, insert, delete, member)
 import Data.Rank1Typeable (typeOf)
 import GHC.Generics
 
+-- | The size of a worker pool
 type PoolSize = Integer
+
+-- | The rotation policy applied to a worker pool
 type Rotation = RotationPolicy WPState Worker
 
+-- | A handle to a worker process
 newtype Worker = Worker { unWorker :: (ProcessId, MonitorRef) }
   deriving (Typeable, Generic, Ord, Show)
 
 instance Eq Worker where
-  (Worker (p, m)) == (Worker (p', m')) = p == p && m == m'
+  (Worker (p, m)) == (Worker (p', m')) = p == p' && m == m'
 
 instance Binary Worker where
 instance NFData Worker where
@@ -102,17 +101,6 @@ instance Routable Worker where
   sendTo = sendTo . fst . unWorker
   unsafeSendTo = unsafeSendTo . fst . unWorker
 
-worker :: Process () -> Resource Worker
-worker w =
-  Resource {
-      create   = getSelfPid >>= \p -> spawnMonitorLocal (link p >> w) >>= return . Worker
-    , destroy  = \(Worker (p, r))  -> unmonitor r >> exit p Shutdown >> awaitExit p
-    , checkRef = (\m (Worker (_, r)) -> do
-         handleMessageIf m (\(ProcessMonitorNotification r' _ _) -> r == r')
-                           (\_ -> return Dead))
-    , accept   = \t r -> unsafeSendChan (ticketChan t) r
-    }
-
 data WPState = WPState { sizeLimit :: PoolSize
                        , monitors  :: HashSet MonitorRef
                        }
@@ -123,6 +111,19 @@ szLimit = accessor sizeLimit (\sz' wps -> wps { sizeLimit = sz' })
 workerRefs :: Accessor WPState (HashSet MonitorRef)
 workerRefs = accessor monitors (\ms' wps -> wps { monitors = ms' })
 
+-- | Create a 'Resource' specification for a given @Process ()@.
+worker :: Process () -> Resource Worker
+worker w =
+  Resource {
+      create   = getSelfPid >>= \p -> Worker <$> spawnMonitorLocal (link p >> w)
+    , destroy  = \(Worker (p, r))  -> unmonitor r >> exit p Shutdown >> awaitExit p
+    , checkRef = \m (Worker (_, r)) ->
+         handleMessageIf m (\(ProcessMonitorNotification r' _ _) -> r == r')
+                           (\_ -> return Dead)
+    , accept   = \t r -> unsafeSendChan (ticketChan t) r
+    }
+
+-- | Run a worker pool with the supplied configuration
 runWorkerPool :: Process ()
               -> PoolSize
               -> InitPolicy
@@ -145,7 +146,7 @@ poolDef = PoolBackend { acquire  = apiAcquire
                       }
 
 getLimit :: Pool WPState Worker Integer
-getLimit = getState >>= return . sizeLimit
+getLimit = sizeLimit <$> getState
 
 apiAcquire  :: Pool WPState Worker (Take Worker)
 apiAcquire = do
@@ -163,14 +164,14 @@ apiAcquire = do
       , free == 0        = doCreate
       | otherwise        = doAcquire
 
-    doAcquire = return . maybe Block Take =<< acquirePooledResource
+    doAcquire = maybe Block Take <$> acquirePooledResource
     doCreate =
       getResourceType >>= lift . create >>= stashResource >> doAcquire
 
 apiDispose :: Worker -> Pool WPState Worker ()
 apiDispose r@Worker{..} = do
   rType <- getResourceType
-  res <- lift $ destroy rType r
+  lift $ destroy rType r
   deletePooledResource r
   modifyState (workerRefs ^: HashSet.delete (snd unWorker))
 
@@ -184,12 +185,14 @@ apiSetup = do
     startResources :: PoolSize -> Pool WPState Worker ()
     startResources cnt = do
       st <- getState :: Pool WPState Worker WPState
-      if cnt < (sizeLimit st)
-         then do rType <- getResourceType
-                 res <- lift $ create rType
-                 stashResource res
-                 startResources (cnt + 1)
-         else return ()
+      when (exceedsLimit cnt $ st ^. szLimit) $
+        do rType <- getResourceType
+           res <- lift $ create rType
+           stashResource res
+           startResources (cnt + 1)
+
+    exceedsLimit :: PoolSize -> PoolSize -> Bool
+    exceedsLimit = (<)
 
 apiTeardown :: ExitReason -> Pool WPState Worker ()
 apiTeardown = const $ foldResources (const apiDispose) ()
@@ -200,9 +203,7 @@ apiInfoCall msg = do
   -- we need to permanently remove it so its ref doesn't leak to
   -- some unfortunate consumer (who would naturally expect the pid to be valid).
   mSig <- lift $ checkMonitor msg
-  case mSig of
-    Nothing   -> return ()
-    Just mRef -> checkRefs mRef
+  forM_ mSig checkRefs
 
   where
     checkMonitor :: Message -> Process (Maybe ProcessMonitorNotification)
@@ -210,7 +211,7 @@ apiInfoCall msg = do
 
     checkRefs :: ProcessMonitorNotification -> Pool WPState Worker ()
     checkRefs (ProcessMonitorNotification r p _) = do
-      mRefs <- getState >>= return . (^. workerRefs)
+      mRefs <- (^. workerRefs) <$> getState
       when (HashSet.member r mRefs) $ do
         modifyState (workerRefs ^: HashSet.delete r)
         deletePooledResource $ Worker (p, r)

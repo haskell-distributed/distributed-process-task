@@ -30,11 +30,12 @@
 
 module Control.Distributed.Process.Task.Pool
  ( -- Client Facing API
-   transaction
- , acquireResource
+   acquireResource
  , releaseResource
+ , transaction
  , checkOut
  , checkIn
+ , withResource
  , transfer
  , transferTo
  , poolStats
@@ -89,39 +90,60 @@ import Control.Monad.Catch (finally, mask)
 -- Client Facing API                                                          --
 --------------------------------------------------------------------------------
 
-transaction :: forall a r. (Referenced r)
-        => ResourcePool r
-        -> (r -> Process a)
-        -> Process a
-transaction pool proc =
-  mask $ \restore -> do
-    r <- acquireResource pool
-    finally (restore $ proc r)
-            (releaseResource pool r)
-
-checkOut :: forall r. (Referenced r) => ResourcePool r -> Process r
-checkOut = acquireResource
-
+-- | Acquire a resource of type /r/ from the pool.
+--
+-- > acquireResource poolHandle >>= doSomethingWithResource
+--
 acquireResource :: forall r. (Referenced r)
                 => ResourcePool r
                 -> Process r
 acquireResource pool =
   getSelfPid >>= callChan pool . AcquireResource >>= receiveChan
 
-checkIn :: forall r. (Referenced r) => ResourcePool r -> r -> Process ()
-checkIn = releaseResource
-
+-- | Release a resource of type /r/, previously acquired from the pool.
+--
+-- > acquireResource poolHandle >>= \r -> doSomethingWithResource >> releaseResource r
+--
 releaseResource :: forall r. (Referenced r)
                 => ResourcePool r
                 -> r
                 -> Process ()
 releaseResource pool res = getSelfPid >>= cast pool . ReleaseResource res
 
-poolStats :: forall r . Referenced r
-             => ResourcePool r
-             -> Process PoolStats
-poolStats pool = SafeClient.call pool StatsReq
+-- | Acquire a resource of type /r/ from the pool, operate on it, and released
+-- the resource once we're finished.
+--
+-- Asynchronous exceptions are masked during acquisition and release, and
+-- restored only during the execution of the user supplied operation.
+--
+-- > acquireResource poolHandle >>= doSomethingWithResource
+--
+transaction :: forall a r. (Referenced r)
+            => ResourcePool r
+            -> (r -> Process a)
+            -> Process a
+transaction pool proc =
+  mask $ \restore -> do
+    r <- acquireResource pool
+    finally (restore $ proc r)
+            (releaseResource pool r)
 
+-- | Synonym for 'acquireResource'
+checkOut :: forall r. (Referenced r) => ResourcePool r -> Process r
+checkOut = acquireResource
+
+-- | Synonym for 'releaseResource'
+checkIn :: forall r. (Referenced r) => ResourcePool r -> r -> Process ()
+checkIn = releaseResource
+
+-- | Synonym for 'transaction'
+withResource :: forall a r. (Referenced r)
+             => ResourcePool r
+             -> (r -> Process a)
+             -> Process a
+withResource = transaction
+
+-- | Transfer a resource owned by this (calling) process, to the suppled 'ProcessId'
 transferTo :: forall r. (Referenced r)
            => ResourcePool r
            -> r
@@ -129,6 +151,7 @@ transferTo :: forall r. (Referenced r)
            -> Process TransferResponse
 transferTo pool res pid = getSelfPid >>= \us -> transfer pool us res pid
 
+-- | Transfer a resource owned by the first 'ProcessId', over to the second 'ProcessId'
 transfer :: forall r . (Referenced r)
          => ResourcePool r
          -> ProcessId
@@ -137,11 +160,17 @@ transfer :: forall r . (Referenced r)
          -> Process TransferResponse
 transfer pool old res new = call pool $ TransferRequest res new old
 
+-- | Retrieve statistics for the pool refered to by the supplied handle.
+poolStats :: forall r . Referenced r
+             => ResourcePool r
+             -> Process PoolStats
+poolStats pool = SafeClient.call pool StatsReq
 
 --------------------------------------------------------------------------------
 -- Starting/Running a Resource Pool                                           --
 --------------------------------------------------------------------------------
 
+-- | Spawns the pool process given as @Process ()@ and wraps it in a 'ResourcePool' handle.
 startPool :: forall r . (Referenced r)
           => Process ()
           -> Process (ResourcePool r)

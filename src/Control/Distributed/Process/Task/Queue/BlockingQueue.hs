@@ -87,6 +87,7 @@ data GetStats = GetStats
   deriving (Typeable, Generic)
 instance Binary GetStats where
 
+-- | Statistics for a blocking queue.
 data BlockingQueueStats = BlockingQueueStats {
     maxJobs    :: Int
   , activeJobs :: Int
