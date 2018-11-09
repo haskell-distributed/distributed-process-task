@@ -8,23 +8,25 @@
 -- Stability   :  experimental
 -- Portability :  non-portable (requires concurrency)
 --
--- The /Task Framework/ intends to provide tools for task management, work
+-- A Cloud Haskell /Task Framework/, providing tools for task management, work
 -- scheduling and distributed task coordination. These capabilities build on the
--- /Execution Framework/ as well as other tools and libraries. The framework is
--- currently a work in progress. The current release includes a simple bounded
--- blocking queue implementation only, as an example of the kind of capability
--- and API that we intend to produce.
+-- /Execution Framework/ as well as other tools and libraries.
 --
--- The /Task Framework/ will be broken down by the task scheduling and management
+-- The /Task Framework/ is broken down by the task scheduling and management
 -- algorithms it provides, e.g., at a low level providing work queues, worker pools
 -- and the like, whilst at a high level allowing the user to choose between work
--- stealing, sharing, distributed coordination, user defined sensor based bounds/limits
--- and so on.
+-- stealing, sharing, distributed coordination, user defined sensor based
+-- bounds/limits, and so on.
 --
 -----------------------------------------------------------------------------
 module Control.Distributed.Process.Task
   ( -- * Task Queues
     module Control.Distributed.Process.Task.Queue.BlockingQueue
-  ) where
+    -- * Pools and the pool backend
+  , module Control.Distributed.Process.Task.Pool.WorkerPool
+  , module Control.Distributed.Process.Task.Pool
+    ) where
 
 import Control.Distributed.Process.Task.Queue.BlockingQueue
+import Control.Distributed.Process.Task.Pool
+import Control.Distributed.Process.Task.Pool.WorkerPool

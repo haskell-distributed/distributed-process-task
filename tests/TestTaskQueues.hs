@@ -25,8 +25,7 @@ import Control.Distributed.Process.ManagedProcess
 import Control.Distributed.Process.Serializable()
 import Control.Distributed.Process.SysTest.Utils
 
-import Control.Distributed.Process.Task.Queue.BlockingQueue hiding (start)
-import qualified Control.Distributed.Process.Task.Queue.BlockingQueue as Pool (start)
+import Control.Distributed.Process.Task.Queue.BlockingQueue
 
 import Test.Framework (Test, defaultMain, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
@@ -61,7 +60,7 @@ waitForDown ref =
 
 startPool :: SizeLimit -> Process ProcessId
 startPool sz = spawnLocal $ do
-  Pool.start (pool sz :: Process (InitResult (BlockingQueue String)))
+  startQueue (mkQueue sz :: Process (InitResult (BlockingQueue String)))
 
 testSimplePoolJobBlocksCaller :: TestResult (AsyncResult (Either ExitReason String))
                               -> Process ()

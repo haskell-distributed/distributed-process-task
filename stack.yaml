@@ -1,4 +1,4 @@
-resolver: lts-11.13
+resolver: lts-12.17
 
 packages:
 - '.'
@@ -16,6 +16,7 @@ extra-deps:
 - rematch-0.2.0.0
 - distributed-process-extras-0.3.5
 - distributed-process-async-0.2.6
+- distributed-process-supervisor-0.2.1
 - exceptions-0.10.0
 - rank1dynamic-0.4.0
 - distributed-static-0.3.8

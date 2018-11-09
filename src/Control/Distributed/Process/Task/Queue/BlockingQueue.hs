@@ -33,10 +33,10 @@ module Control.Distributed.Process.Task.Queue.BlockingQueue
   ( BlockingQueue()
   , SizeLimit
   , BlockingQueueStats(..)
-  , start
-  , pool
+  , startQueue
+  , mkQueue
   , executeTask
-  , stats
+  , queueStats
   ) where
 
 import Control.Distributed.Process hiding (call)
@@ -105,10 +105,10 @@ data BlockingQueue a = BlockingQueue {
 
 -- | Start a queue with an upper bound on the # of concurrent tasks.
 --
-start :: forall a . (Serializable a)
-         => Process (InitResult (BlockingQueue a))
-         -> Process ()
-start init' = ManagedProcess.serve () (\() -> init') poolServer
+startQueue :: forall a . (Serializable a)
+           => Process (InitResult (BlockingQueue a))
+           -> Process ()
+startQueue init' = ManagedProcess.serve () (\() -> init') poolServer
   where poolServer =
           defaultProcess {
               apiHandlers = [
@@ -120,10 +120,10 @@ start init' = ManagedProcess.serve () (\() -> init') poolServer
 
 -- | Define a pool of a given size.
 --
-pool :: forall a . Serializable a
+mkQueue :: forall a . Serializable a
      => SizeLimit
      -> Process (InitResult (BlockingQueue a))
-pool sz' = return $ InitOk (BlockingQueue sz' [] Seq.empty) Infinity
+mkQueue sz' = return $ InitOk (BlockingQueue sz' [] Seq.empty) Infinity
 
 -- | Enqueue a task in the pool and block until it is complete.
 --
@@ -131,12 +131,12 @@ executeTask :: forall s a . (Addressable s, Serializable a)
             => s
             -> Closure (Process a)
             -> Process (Either ExitReason a)
-executeTask sid t = call sid t
+executeTask = call
 
 -- | Fetch statistics for a queue.
 --
-stats :: forall s . Addressable s => s -> Process (Maybe BlockingQueueStats)
-stats sid = tryCall sid GetStats
+queueStats :: forall s . Addressable s => s -> Process (Maybe BlockingQueueStats)
+queueStats sid = tryCall sid GetStats
 
 -- internal / server-side API
 
@@ -162,19 +162,17 @@ acceptTask :: Serializable a
            -> BlockingQueue a
            -> Closure (Process a)
            -> Process (BlockingQueue a)
-acceptTask from s@(BlockingQueue sz' runQueue taskQueue) task' =
+acceptTask from s@(BlockingQueue sz' runQueue taskQueue) task' = do
   let currentSz = length runQueue
-  in case currentSz >= sz' of
-    True  -> do
-      return $ s { accepted = enqueue taskQueue (from, task') }
-    False -> do
-      proc <- unClosure task'
-      asyncHandle <- async $ task $ expect >>= \() -> proc
-      ref <- monitorAsync asyncHandle
-      let wkr = asyncWorker asyncHandle
-      let taskEntry = (ref, from, asyncHandle)
-      send wkr ()
-      return s { active = (taskEntry:runQueue) }
+  if currentSz >= sz'
+    then return s{ accepted = enqueue taskQueue (from, task') }
+    else do proc <- unClosure task'
+            asyncHandle <- async $ task $ expect >>= \() -> proc
+            ref <- monitorAsync asyncHandle
+            let wkr = asyncWorker asyncHandle
+            let taskEntry = (ref, from, asyncHandle)
+            send wkr ()
+            return s { active = taskEntry:runQueue }
 
 -- a worker has exited, process the AsyncResult and send a reply to the
 -- waiting client (who is still stuck in 'call' awaiting a response).
@@ -193,9 +191,9 @@ taskComplete s@(BlockingQueue _ runQ _)
     respond :: CallRef (Either ExitReason a)
             -> AsyncResult a
             -> Process ()
-    respond c (AsyncDone       r) = replyTo c ((Right r) :: (Either ExitReason a))
-    respond c (AsyncFailed     d) = replyTo c ((Left (ExitOther $ show d))  :: (Either ExitReason a))
-    respond c (AsyncLinkFailed d) = replyTo c ((Left (ExitOther $ show d))  :: (Either ExitReason a))
+    respond c (AsyncDone       r) = replyTo c (Right r :: (Either ExitReason a))
+    respond c (AsyncFailed     d) = replyTo c (Left (ExitOther $ show d)  :: (Either ExitReason a))
+    respond c (AsyncLinkFailed d) = replyTo c (Left (ExitOther $ show d)  :: (Either ExitReason a))
     respond _      _              = die $ ExitOther "IllegalState"
 
     bump :: BlockingQueue a
@@ -216,7 +214,7 @@ findWorker key = find (\(ref,_,_) -> ref == key)
 deleteFromRunQueue :: (MonitorRef, CallRef (Either ExitReason a), Async a)
                    -> [(MonitorRef, CallRef (Either ExitReason a), Async a)]
                    -> [(MonitorRef, CallRef (Either ExitReason a), Async a)]
-deleteFromRunQueue c@(p, _, _) runQ = deleteBy (\_ (b, _, _) -> b == p) c runQ
+deleteFromRunQueue c@(p, _, _) = deleteBy (\_ (b, _, _) -> b == p) c
 
 {-# INLINE enqueue #-}
 enqueue :: Seq a -> a -> Seq a
@@ -228,6 +226,6 @@ dequeue s = maybe Nothing (\(s' :> a) -> Just (a, s')) $ getR s
 
 getR :: Seq a -> Maybe (ViewR a)
 getR s =
-  case (viewr s) of
+  case viewr s of
     EmptyR -> Nothing
     a      -> Just a
